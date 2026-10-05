@@ -21,15 +21,45 @@ TAILLE_FENETRE = 128      # pixels
 RESOLUTION = 10           # mètres
 QUANTIFICATION = 10000.0  # réflectance = valeur / 10000
 
-# Classes de sortie
-CLASSES = ["Eau", "Végétation saine", "Végétation dégradée", "Sol nu", "Sable/Dune"]
+# Classes de sortie. La classe 2 regroupe les couverts épars (NDVI
+# typiquement entre 0,15 et 0,40), d'où son libellé.
+CLASSES = ["Eau", "Végétation saine", "Végétation clairsemée ou dégradée",
+           "Sol nu", "Sable/Dune"]
 COULEURS = ["#0000FF", "#006400", "#90EE90", "#D2B48C", "#FFA500"]
 NON_CLASSE = 255
 
-# Valeurs de la couche SCL considérées comme invalides :
-# 0 sans donnée, 1 saturé/défectueux, 3 ombre de nuage,
-# 8 et 9 nuages, 10 cirrus
-SCL_INVALIDES = [0, 1, 3, 8, 9, 10]
+# Couche SCL : mêmes classes masquées que dans le notebook d'entraînement
+# (3 ombre de nuage, 8 et 9 nuages, 10 cirrus), plus 0 = sans donnée
+SCL_NUAGES = [3, 8, 9, 10]
+SCL_SANS_DONNEE = 0
 
-# Tuiles sur lesquelles le modèle a été entraîné (zone de Bol)
+# ---------------------------------------------------------------------
+# Domaine de validité du modèle
+# ---------------------------------------------------------------------
+# Tuiles Sentinel-2 qui recouvrent la zone d'entraînement
 TUILES_ENTRAINEMENT = {"33PVQ", "33PVR"}
+# Rectangle d'entraînement (notebook) : ouest, sud, est, nord, en degrés
+EMPRISE_ENTRAINEMENT = (14.40, 13.10, 15.05, 13.80)
+
+# Saisons autour du lac Tchad. Environ 90 % des pluies tombent de juin
+# à septembre ; le lac monte ensuite de novembre à février (USGS).
+# Deux dates ne sont comparables que si elles sont de la même saison.
+SAISONS = {
+    "pluies": (6, 7, 8, 9),
+    "seche_fraiche": (10, 11, 12, 1, 2),
+    "seche_chaude": (3, 4, 5),
+}
+LIBELLES_SAISONS = {
+    "pluies": "Saison des pluies (juin à septembre)",
+    "seche_fraiche": "Saison sèche fraîche (octobre à février)",
+    "seche_chaude": "Saison sèche chaude (mars à mai)",
+}
+
+
+def saison(date_iso):
+    """Saison d'une date au format AAAA-MM-JJ."""
+    mois = int(date_iso[5:7])
+    for nom, liste_mois in SAISONS.items():
+        if mois in liste_mois:
+            return nom
+    raise ValueError(f"Date invalide : {date_iso}")
