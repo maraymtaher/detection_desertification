@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block soustitre %}Vue générale des analyses satellitaires et des résultats disponibles.{% endblock %}
+{% block contenu %}
+<div class="indicateurs">
+  <div class="indicateur"><span class="rond">{{ ico("analyse") }}</span>
+    <div><div class="nombre">{{ chiffres.analyses }}</div><div class="nom">Analyses réalisées</div></div></div>
+  <div class="indicateur"><span class="rond">{{ ico("satellite") }}</span>
+    <div><div class="nombre">{{ chiffres.produits }}</div><div class="nom">Images importées</div></div></div>
+  <div class="indicateur"><span class="rond sable">{{ ico("calendrier") }}</span>
+    <div><div class="nombre">2017–2026</div><div class="nom">Période des données d'entraînement</div></div></div>
+  <div class="indicateur"><span class="rond sable">{{ ico("modele") }}</span>
+    <div><div class="nombre">U-Net</div><div class="nom">Modèle de segmentation</div></div></div>
+</div>
+
+<div class="grille-bord">
+  <section class="panneau">
+    <header><h2>Nouvelle analyse</h2><p>Importer un produit Sentinel-2</p></header>
+    <div class="corps">{% include "_import.html" %}</div>
+  </section>
+
+  <section class="panneau">
+    <header><h2>Zone de visualisation</h2>
+      <p>Zone de validité du modèle et tuiles Sentinel-2 couvertes</p></header>
+    <div class="corps">
+      <div id="carte" class="carte"></div>
+      <div class="legende">
+        {% for nom, couleur in classes_modele %}
+        <span><i class="pastille" style="background:{{ couleur }}"></i>{{ nom }}</span>
+        {% endfor %}
+      </div>
+      <div class="legende" style="margin-top:8px; color:var(--attenue)">
+        <span><i class="trait"></i>Zone de validité du modèle</span>
+        <span><i class="trait tirets"></i>Tuiles Sentinel-2</span>
+      </div>
+      <p class="note">Les résultats géoréférencés de chaque analyse s'afficheront sur cette carte.</p>
+    </div>
+  </section>
+</div>
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Chaîne de traitement automatique</h2>
+    <p>Les cinq étapes exécutées par le système pour chaque image</p></header>
+  <div class="corps">
+    <div class="chaine">
+      <div><b>Import</b>Archive SAFE de niveau L2A</div>
+      <div><b>Vérification</b>Niveau, bandes, couche nuages</div>
+      <div><b>Prétraitement</b>10 bandes et 4 indices à 10 m</div>
+      <div><b>Segmentation</b>U-Net, fenêtres de 128 × 128</div>
+      <div><b>Résultats</b>Carte, surfaces, exports</div>
+    </div>
+  </div>
+</section>
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Images importées</h2><p>{{ chiffres.produits }} produit(s) Sentinel-2 dans votre espace</p></header>
+  {% if produits %}
+  <table class="donnees" style="margin-top:8px">
+    <thead><tr><th>Acquisition</th><th>Tuile</th><th class="secondaire">Satellite</th>
+      <th class="secondaire">Traitement</th><th>État</th><th class="secondaire">Importée le</th><th></th></tr></thead>
+    <tbody>
+    {% for p in produits %}
+      <tr>
+        <td><b>{{ p['date_acquisition'] }}</b></td>
+        <td class="mono">{{ p['tuile'] }}</td>
+        <td class="secondaire">{{ p['satellite'] }}</td>
+        <td class="secondaire mono">{{ p['version_traitement'] }}</td>
+        <td>{% if p['avertissements'] %}<span class="puce alerte"><i></i>Hors zone</span>
+            {% else %}<span class="puce ok"><i></i>Vérifiée</span>{% endif %}</td>
+        <td class="secondaire" style="color:var(--attenue)">{{ p['importe_le'][:16] }}</td>
+        <td style="text-align:right">
+          <a class="btn btn-secondaire" style="padding:5px 13px"
+             href="{{ url_for('analyses.fiche', produit_id=p['id']) }}">Ouvrir</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucune image pour l'instant. Utilisez « Nouvelle analyse » pour importer
+    une archive Sentinel-2 L2A téléchargée depuis le Copernicus Browser.</div>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script>
+carteZone("carte", {{ emprise_modele | tojson }});
+activerImport({{ url_for('analyses.importer') | tojson }});
+</script>
+{% endblock %}

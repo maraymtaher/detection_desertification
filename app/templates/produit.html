@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Image du {{ produit['date_acquisition'] }}{% endblock %}
+{% block entete %}Image du {{ produit['date_acquisition'] }}{% endblock %}
+{% block soustitre %}Tuile {{ produit['tuile'] }} · produit vérifié et prêt pour l'analyse.{% endblock %}
+{% block actions %}
+{% if avertissements %}<span class="puce alerte"><i></i>Hors zone de validité</span>
+{% else %}<span class="puce ok"><i></i>Produit vérifié</span>{% endif %}
+{% endblock %}
+{% block contenu %}
+{% for a in avertissements %}
+  <div class="message warning">{{ a }}</div>
+{% endfor %}
+<div class="deux-colonnes">
+  <div style="display:grid; gap:20px; align-content:start">
+    <section class="panneau">
+      <header><h2>Informations sur le produit</h2><p>Lues dans les métadonnées de l'archive</p></header>
+      <div class="fiche">
+        <div><div class="nom">Satellite</div><div class="val">{{ produit['satellite'] }}</div></div>
+        <div><div class="nom">Niveau</div><div class="val">L2A</div></div>
+        <div><div class="nom">Tuile</div><div class="val">{{ produit['tuile'] }}</div></div>
+        <div><div class="nom">Traitement</div><div class="val">{{ produit['version_traitement'] }}</div></div>
+        <div class="large"><div class="nom">Saison</div><div class="val texte">{{ saison }}</div></div>
+        <div class="large"><div class="nom">Identifiant du produit</div>
+          <div class="val identifiant">{{ produit['nom'] }}</div></div>
+      </div>
+    </section>
+    <section class="panneau">
+      <header><h2>Lancer le traitement</h2><p>Choix de la zone, puis segmentation par le modèle</p></header>
+      <div class="corps">
+        <p class="note" style="margin:0 0 14px">Cette fonction arrive à l'étape suivante du développement.</p>
+        <div style="display:flex; gap:10px; flex-wrap:wrap">
+          <span class="btn btn-principal inactif">{{ ico("analyse") }} Choisir une zone et analyser</span>
+          <form method="post" action="{{ url_for('analyses.supprimer', produit_id=produit['id']) }}"
+                onsubmit="return confirm('Supprimer cette image et son archive ?');">
+            <input type="hidden" name="jeton" value="{{ jeton() }}">
+            <button class="btn btn-danger">{{ ico("corbeille") }} Supprimer</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </div>
+  <section class="panneau">
+    <header><h2>Emprise de la tuile</h2><p>Contour blanc : tuile de cette image</p></header>
+    <div class="corps"><div id="carte" class="carte" style="height:360px"></div></div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>carteZone("carte", {{ emprise_modele | tojson }},
+  { tuileActive: {{ produit['tuile'] | tojson }}, marge: 0.9 });</script>
+{% endblock %}

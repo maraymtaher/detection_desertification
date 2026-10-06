@@ -1,0 +1,47 @@
+{% from "_icones.html" import ico, choix_theme %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titre %}Accès{% endblock %} · TerraWatch</title>
+  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="public">
+  <section class="vitrine">
+    <div id="carte" class="carte"></div>
+    <div class="haut">
+      <div class="surtitre">Lac Tchad · Département de Bol</div>
+      <h1>Détection de la désertification par intelligence artificielle</h1>
+    </div>
+    <div class="bas">
+      <div class="faits">
+        <div><b>10 m</b>Résolution au sol</div>
+        <div><b>5</b>Classes d'occupation du sol</div>
+        <div><b>2017–2026</b>Période des données d'entraînement</div>
+        <div><b>U-Net</b>Modèle de segmentation</div>
+      </div>
+    </div>
+  </section>
+  <section class="acces">
+    <div class="theme-public">{{ choix_theme() }}</div>
+    <a class="marque" href="{{ url_for('main.accueil') }}">
+      <span class="sigle">{{ ico("globe") }}</span>
+      <span><b>TerraWatch</b><small>Détection de la désertification par IA</small></span>
+    </a>
+    {% for categorie, message in get_flashed_messages(with_categories=true) %}
+      <div class="message {{ categorie }}" style="margin:22px 0 -8px">{{ message }}</div>
+    {% endfor %}
+    {% block contenu %}{% endblock %}
+    <p class="note">Zone de validité du modèle : rectangle orange sur la carte
+      (tuiles {{ tuiles_modele | join(" et ") }}). En dehors, les résultats ne sont pas fiables.</p>
+  </section>
+</div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="{{ url_for('static', filename='js/carte_zone.js') }}"></script>
+<script>carteZone("carte", {{ emprise_modele | tojson }}, { interactive: false, marge: 0.9 });</script>
+</body>
+</html>

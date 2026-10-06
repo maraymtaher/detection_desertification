@@ -1,0 +1,21 @@
+{# Bloc d'import réutilisable (tableau de bord et page « Nouvelle analyse ») #}
+{% from "_icones.html" import ico %}
+<form id="formulaire" method="post" enctype="multipart/form-data"
+      action="{{ url_for('analyses.importer') }}">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <label class="depot" id="depot" for="archive">
+    {{ ico("import") }}
+    <b>Choisir un fichier</b>
+    <small>Produit Level-2A au format ZIP · ou déposez-le ici</small>
+    <div class="choisi" id="choisi"></div>
+    <input type="file" id="archive" name="archive" accept=".zip" required>
+  </label>
+  <button class="btn btn-principal btn-large" id="bouton" style="margin-top:14px" disabled>
+    Envoyer et vérifier {{ ico("fleche") }}</button>
+</form>
+<div id="suivi" class="d-none" style="margin-top:16px">
+  <div class="jauge"><i id="barre"></i></div>
+  <div class="suivi-ligne"><span id="etat">Envoi en cours…</span><b id="part">0 %</b></div>
+</div>
+<div id="erreur" class="message danger d-none" style="margin:16px 0 0"></div>
+<p class="note">Le système vérifiera le produit avant de lancer le traitement.</p>

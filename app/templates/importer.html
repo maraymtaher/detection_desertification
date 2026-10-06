@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Nouvelle analyse{% endblock %}
+{% block entete %}Nouvelle analyse{% endblock %}
+{% block soustitre %}Import du produit Sentinel-2, vérification, puis lancement du traitement.{% endblock %}
+{% block contenu %}
+<div class="deux-colonnes">
+  <section class="panneau">
+    <header><h2>Importer un produit Sentinel-2</h2><p>Archive SAFE de niveau L2A, 1,5 Go au maximum</p></header>
+    <div class="corps">{% include "_import.html" %}</div>
+  </section>
+  <section class="panneau">
+    <header><h2>Contrôles à la réception</h2><p>Effectués automatiquement avant tout calcul</p></header>
+    <div class="corps">
+      <ul class="controles">
+        <li>{{ ico("coche") }}<span>Le produit est de niveau <b>L2A</b> (réflectance de surface).</span></li>
+        <li>{{ ico("coche") }}<span>Les <b>10 bandes</b> utilisées par le modèle sont présentes.</span></li>
+        <li>{{ ico("coche") }}<span>La <b>couche nuages</b> (SCL) est présente.</span></li>
+        <li>{{ ico("coche") }}<span>Le décalage radiométrique est lu dans les métadonnées.</span></li>
+        <li class="alerte">{{ ico("alerte") }}<span>Une tuile autre que
+          {{ tuiles_modele | join(" ou ") }} est acceptée avec un avertissement.</span></li>
+      </ul>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>activerImport({{ url_for('analyses.importer') | tojson }});</script>
+{% endblock %}

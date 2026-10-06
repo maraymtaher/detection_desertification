@@ -1,0 +1,31 @@
+{# Jeu d'icônes en ligne (aucun fichier externe) #}
+{% macro ico(nom) %}
+<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">
+{% if nom == "bord" %}<rect x="3" y="3" width="8" height="8" rx="1.5"/><rect x="13" y="3" width="8" height="5" rx="1.5"/><rect x="13" y="10" width="8" height="11" rx="1.5"/><rect x="3" y="13" width="8" height="8" rx="1.5"/>
+{% elif nom == "import" %}<path d="M12 15V4m0 0L8 8m4-4 4 4"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+{% elif nom == "analyse" %}<path d="m3 8 9-5 9 5-9 5-9-5Z"/><path d="m3 12.5 9 5 9-5"/><path d="m3 17 9 5 9-5"/>
+{% elif nom == "compare" %}<rect x="3" y="4" width="7" height="16" rx="1.5"/><rect x="14" y="4" width="7" height="16" rx="1.5"/><path d="M10 12h4"/>
+{% elif nom == "satellite" %}<path d="m5 13 6 6"/><path d="m9 5 10 10"/><path d="M4 9l5-5 4 4-5 5-4-4Z"/><path d="M15 16l4-4"/><path d="M4 20a4 4 0 0 0 4-4"/>
+{% elif nom == "sortie" %}<path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3"/><path d="M10 16l4-4-4-4"/><path d="M14 12H4"/>
+{% elif nom == "coche" %}<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>
+{% elif nom == "alerte" %}<path d="M12 4 2.5 20h19L12 4Z"/><path d="M12 10v5"/><path d="M12 17.5v.5"/>
+{% elif nom == "fleche" %}<path d="M5 12h14"/><path d="m13 6 6 6-6 6"/>
+{% elif nom == "corbeille" %}<path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M6 7l1 13h10l1-13"/>
+{% elif nom == "globe" %}<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c3 3.2 3 14.8 0 18"/><path d="M12 3c-3 3.2-3 14.8 0 18"/>
+{% elif nom == "carte" %}<path d="m3 6 6-2 6 2 6-2v14l-6 2-6-2-6 2V6Z"/><path d="M9 4v14"/><path d="M15 6v14"/>
+{% elif nom == "calendrier" %}<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/>
+{% elif nom == "modele" %}<path d="M4 5v6a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V5"/><path d="M12 14v5"/><path d="M8 19h8"/>
+{% elif nom == "historique" %}<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/>
+{% elif nom == "soleil" %}<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>
+{% elif nom == "lune" %}<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>
+{% endif %}
+</svg>
+{% endmacro %}
+
+{# Sélecteur de thème, utilisable sur toutes les pages #}
+{% macro choix_theme() %}
+<div class="choix-theme" role="group" aria-label="Thème de l'interface">
+  <button type="button" data-choix-theme="clair" onclick="choisirTheme('clair')">{{ ico("soleil") }} Clair</button>
+  <button type="button" data-choix-theme="sombre" onclick="choisirTheme('sombre')">{{ ico("lune") }} Sombre</button>
+</div>
+{% endmacro %}

@@ -1,0 +1,11 @@
+{% extends "base_public.html" %}
+{% block titre %}Accueil{% endblock %}
+{% block contenu %}
+<h2>Accès à la plateforme</h2>
+<p class="intro">Importez un produit Sentinel-2 de niveau L2A : le système le vérifie,
+  le prétraite et produit une carte d'occupation du sol. La comparaison de deux dates
+  de la même saison fait apparaître les changements.</p>
+<a class="btn btn-principal btn-large" href="{{ url_for('auth.connexion') }}">Se connecter {{ ico("fleche") }}</a>
+<a class="btn btn-secondaire btn-large" style="margin-top:10px"
+   href="{{ url_for('auth.inscription') }}">Créer un compte</a>
+{% endblock %}
