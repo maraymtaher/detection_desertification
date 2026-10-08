@@ -47,6 +47,19 @@ CREATE TABLE IF NOT EXISTS comparaison (
     resume          TEXT NOT NULL DEFAULT '',
     cree_le         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS suivi (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    utilisateur_id  INTEGER NOT NULL REFERENCES utilisateur(id),
+    analyses        TEXT NOT NULL,            -- numéros d'analyses, séparés par des virgules
+    tuile           TEXT NOT NULL,
+    zone            TEXT NOT NULL,
+    statut          TEXT NOT NULL DEFAULT 'en_attente',
+    progression     INTEGER NOT NULL DEFAULT 0,
+    message         TEXT NOT NULL DEFAULT '',
+    dossier         TEXT NOT NULL DEFAULT '',
+    resume          TEXT NOT NULL DEFAULT '',
+    cree_le         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 

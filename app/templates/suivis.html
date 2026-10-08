@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Suivi temporel{% endblock %}
+{% block entete %}Suivi temporel{% endblock %}
+{% block soustitre %}Comparer plusieurs dates de la même zone pour mesurer l'évolution de l'occupation du sol.{% endblock %}
+{% block contenu %}
+
+<section class="panneau" style="margin-bottom:20px">
+  <header><h2>Nouveau suivi</h2>
+    <p>Seules les analyses terminées, de la même tuile et de la même zone, peuvent être comparées.</p></header>
+  <div class="corps">
+  {% if not groupes %}
+    <div class="vide">Aucune analyse terminée. Analysez d'abord vos images, en choisissant
+      la même zone pour chaque date.</div>
+  {% endif %}
+  {% for gr in groupes %}
+    <form method="post" action="{{ url_for('suivi.creer') }}" class="groupe-suivi">
+      <input type="hidden" name="jeton" value="{{ jeton() }}">
+      <div class="groupe-titre">
+        <b>Tuile {{ gr.tuile }} · {{ "%.1f" | format(gr.surface) | replace(".", ",") }} km²</b>
+        <span>{{ gr.nb_dates }} date(s) disponible(s)</span>
+      </div>
+      <div class="cases">
+        {% for a in gr.analyses %}
+        <label><input type="checkbox" name="analyse" value="{{ a['id'] }}" checked>
+          {{ a['date_acquisition'] }} <small>analyse n° {{ a['id'] }}</small></label>
+        {% endfor %}
+      </div>
+      {% if gr.nb_dates >= 2 %}
+      <button class="btn btn-principal">{{ ico("historique") }} Calculer le suivi</button>
+      {% else %}
+      <p class="note">Il faut au moins deux dates sur cette zone.</p>
+      {% endif %}
+    </form>
+  {% endfor %}
+  </div>
+</section>
+
+<section class="panneau">
+  <header style="padding-bottom:14px"><h2>Suivis calculés</h2></header>
+  {% if suivis %}
+  <table class="donnees">
+    <thead><tr><th>N°</th><th>Tuile</th><th>Analyses</th><th>État</th>
+      <th class="secondaire">Lancé le</th><th></th></tr></thead>
+    <tbody>
+    {% for s in suivis %}
+      <tr>
+        <td class="mono">{{ s['id'] }}</td>
+        <td class="mono">{{ s['tuile'] }}</td>
+        <td>{{ s['analyses'].split(',') | length }} dates</td>
+        <td>{{ statut(s['statut']) }}</td>
+        <td class="secondaire" style="color:var(--attenue)">{{ s['cree_le'][:16] }}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire" style="padding:5px 13px"
+            href="{{ url_for('suivi.detail', suivi_id=s['id']) }}">Ouvrir</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucun suivi pour l'instant.</div>
+  {% endif %}
+</section>
+{% endblock %}

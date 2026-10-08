@@ -316,3 +316,21 @@ table.surfaces .num.fort { color: var(--texte); font-weight: 700; font-size: 14.
   table.donnees .secondaire { display: none; }
 }
 @media (max-width: 520px) { .indicateurs { grid-template-columns: 1fr; } }
+
+/* ---------- Suivi temporel ---------- */
+.groupe-suivi { border: 1px solid var(--ligne); border-radius: 12px; padding: 16px 18px; margin-bottom: 14px; }
+.groupe-suivi:last-child { margin-bottom: 0; }
+.groupe-titre { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.groupe-titre span { color: var(--attenue); font-size: 13px; }
+.cases { display: flex; flex-wrap: wrap; gap: 8px 10px; margin-bottom: 14px; }
+.cases label { display: inline-flex; align-items: center; gap: 7px; padding: 6px 12px; border-radius: 9px;
+               border: 1px solid var(--ligne); background: var(--panneau-doux); font-family: var(--mono);
+               font-size: 13px; cursor: pointer; }
+.cases label small { font-family: var(--sans); color: var(--attenue); }
+.cases input { accent-color: var(--accent); }
+.boite-graphique { position: relative; height: 340px; margin-bottom: 18px; }
+.defile { overflow-x: auto; }
+table.serie th.num, table.serie td.num { text-align: right; white-space: nowrap; }
+table.serie td.num { font-variant-numeric: tabular-nums; }
+table.serie td small { color: var(--attenue); margin-left: 6px; }
+table.serie th, table.serie td { padding-left: 12px; padding-right: 12px; }

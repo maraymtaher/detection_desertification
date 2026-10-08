@@ -23,7 +23,8 @@
          class="{{ 'actif' if request.endpoint in ('analyses.importer', 'analyses.fiche', 'analyses.zone') }}">{{ ico("import") }} Nouvelle analyse</a>
       <a href="{{ url_for('analyses.liste') }}"
          class="{{ 'actif' if request.endpoint in ('analyses.liste', 'analyses.detail') }}">{{ ico("carte") }} Analyses et cartes</a>
-      <span class="inactif">{{ ico("historique") }} Comparaison <em>à venir</em></span>
+      <a href="{{ url_for('suivi.liste') }}"
+         class="{{ 'actif' if request.endpoint in ('suivi.liste', 'suivi.detail') }}">{{ ico("historique") }} Suivi temporel</a>
     </nav>
     <div class="pied-lateral">
       <div class="etat-systeme">

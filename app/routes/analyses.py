@@ -234,6 +234,12 @@ def supprimer_analyse(analyse_id):
         flash("Cette analyse est en cours : attendez la fin avant de la supprimer.",
               "warning")
         return redirect(url_for("analyses.detail", analyse_id=analyse_id))
+    for s in bd().execute("SELECT id, analyses FROM suivi WHERE utilisateur_id = ?",
+                          (g.utilisateur["id"],)):
+        if str(analyse_id) in s["analyses"].split(","):
+            flash(f"Cette analyse est utilisée par le suivi n° {s['id']} : "
+                  "supprimez d'abord ce suivi.", "warning")
+            return redirect(url_for("analyses.detail", analyse_id=analyse_id))
     if analyse["dossier"]:
         shutil.rmtree(analyse["dossier"], ignore_errors=True)
     bd().execute("DELETE FROM analyse WHERE id = ?", (analyse_id,))

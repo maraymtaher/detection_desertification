@@ -60,10 +60,11 @@ def creer_app(surcharge=None):
     app.jinja_env.globals["sous_titre"] = config.SOUS_TITRE
     app.jinja_env.globals["surface_max"] = config.SURFACE_MAX_KM2
 
-    from app.routes import analyses, auth, main
+    from app.routes import analyses, auth, main, suivi
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
     app.register_blueprint(analyses.bp)
+    app.register_blueprint(suivi.bp)
 
     if app.config.get("LANCER_EXECUTANT", True):
         from app import taches
