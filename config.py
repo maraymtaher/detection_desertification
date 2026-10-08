@@ -12,6 +12,16 @@ DOSSIER_IMPORTS = DOSSIER_DONNEES / "imports"
 DOSSIER_RESULTATS = DOSSIER_DONNEES / "resultats"
 CHEMIN_BASE = DOSSIER_DONNEES / "base.sqlite"
 
+# Nom affiché dans l'interface : à modifier ici uniquement
+NOM_SYSTEME = "TerraWatch"
+SOUS_TITRE = "Suivi de la désertification par IA"
+
+# Surface maximale d'une analyse. Limite technique liée à la machine :
+# elle permet de traiter une tuile Sentinel-2 entière (environ 12 100 km²).
+# Le calcul mesuré prend environ 0,14 s par km², soit de l'ordre de
+# 30 minutes pour une tuile complète.
+SURFACE_MAX_KM2 = 12500
+
 # Limite technique d'envoi : une tuile L2A pèse environ 1 Go
 TAILLE_MAX_ENVOI = 1536 * 1024 * 1024      # 1,5 Go
 LONGUEUR_MIN_MOT_DE_PASSE = 8

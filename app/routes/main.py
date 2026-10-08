@@ -23,5 +23,9 @@ def accueil():
         "en_cours": compte("en_cours") + compte("en_attente"),
         "derniere": produits[0]["date_acquisition"] if produits else "—",
     }
+    analyses = bd().execute(
+        "SELECT a.*, p.date_acquisition, p.tuile FROM analyse a "
+        "JOIN produit p ON p.id = a.produit_id "
+        "WHERE a.utilisateur_id = ? ORDER BY a.id DESC LIMIT 5", (uid,)).fetchall()
     return render_template("tableau_de_bord.html", produits=produits,
-                           chiffres=chiffres)
+                           chiffres=chiffres, analyses=analyses)

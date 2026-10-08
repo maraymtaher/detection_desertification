@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block titre %}Tableau de bord{% endblock %} · TerraWatch</title>
+  <title>{% block titre %}Tableau de bord{% endblock %} · {{ nom_systeme }}</title>
   <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -14,15 +14,16 @@
   <aside class="lateral">
     <a class="marque" href="{{ url_for('main.accueil') }}">
       <span class="sigle">{{ ico("globe") }}</span>
-      <span><b>TerraWatch</b><small>Détection de la désertification par IA</small></span>
+      <span><b>{{ nom_systeme }}</b><small>{{ sous_titre }}</small></span>
     </a>
     <nav class="menu">
       <a href="{{ url_for('main.accueil') }}"
          class="{{ 'actif' if request.endpoint == 'main.accueil' }}">{{ ico("bord") }} Tableau de bord</a>
       <a href="{{ url_for('analyses.importer') }}"
-         class="{{ 'actif' if request.endpoint in ('analyses.importer', 'analyses.fiche') }}">{{ ico("import") }} Nouvelle analyse</a>
-      <span class="inactif">{{ ico("carte") }} Cartes de résultats <em>à venir</em></span>
-      <span class="inactif">{{ ico("historique") }} Historique, comparaison <em>à venir</em></span>
+         class="{{ 'actif' if request.endpoint in ('analyses.importer', 'analyses.fiche', 'analyses.zone') }}">{{ ico("import") }} Nouvelle analyse</a>
+      <a href="{{ url_for('analyses.liste') }}"
+         class="{{ 'actif' if request.endpoint in ('analyses.liste', 'analyses.detail') }}">{{ ico("carte") }} Analyses et cartes</a>
+      <span class="inactif">{{ ico("historique") }} Comparaison <em>à venir</em></span>
     </nav>
     <div class="pied-lateral">
       <div class="etat-systeme">

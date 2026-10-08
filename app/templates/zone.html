@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Choisir la zone{% endblock %}
+{% block entete %}Choisir la zone à analyser{% endblock %}
+{% block soustitre %}Image du {{ produit['date_acquisition'] }} · tuile {{ produit['tuile'] }}{% endblock %}
+{% block actions %}
+<a class="btn btn-secondaire" href="{{ url_for('analyses.fiche', produit_id=produit['id']) }}">Retour à l'image</a>
+{% endblock %}
+{% block contenu %}
+<div class="grille-zone">
+  <section class="panneau">
+    <header><h2>Carte</h2>
+      <p>Contour blanc : image importée · cadre orange : zone de validité du modèle · vert : zone choisie</p></header>
+    <div class="corps"><div id="carte" class="carte haute"></div></div>
+  </section>
+
+  <section class="panneau">
+    <header><h2>Zone d'analyse</h2><p>Trois façons de choisir la zone</p></header>
+    <div class="corps">
+      <div style="display:grid; gap:10px">
+        <button type="button" class="btn btn-secondaire btn-large" id="dessiner">Dessiner une zone</button>
+        <button type="button" class="btn btn-secondaire btn-large" id="zone-validite">Utiliser la zone de validité</button>
+        <button type="button" class="btn btn-secondaire btn-large" id="toute-image">Utiliser toute l'image</button>
+      </div>
+      <dl class="mesures">
+        <div><dt>Surface</dt><dd id="val-surface">—</dd></div>
+        <div><dt>Durée estimée</dt><dd id="val-duree">—</dd></div>
+        <div><dt>Hors zone de validité</dt><dd id="val-hors">—</dd></div>
+      </dl>
+      <div id="info-recadrage" class="message success d-none">Le rectangle dépassait de l'image :
+        il a été recadré à son bord (contour blanc).</div>
+      <div id="alerte-zone" class="message warning d-none"></div>
+      <form method="post" action="{{ url_for('analyses.analyser', produit_id=produit['id']) }}">
+        <input type="hidden" name="jeton" value="{{ jeton() }}">
+        <input type="hidden" name="zone" id="zone">
+        <button class="btn btn-principal btn-large" id="lancer" disabled>
+          {{ ico("analyse") }} Lancer l'analyse</button>
+      </form>
+      <button type="button" class="btn-lien" id="effacer">Effacer la zone</button>
+      <p class="note">Surface maximale : {{ surface_max }} km² par analyse. La durée est une
+        estimation fondée sur la vitesse mesurée ; elle dépend de la machine.</p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/zone.js') }}"></script>
+<script>activerZone({ emprise: {{ emprise | tojson }}, validite: {{ emprise_modele | tojson }},
+  surfaceMax: {{ surface_max }} });</script>
+{% endblock %}

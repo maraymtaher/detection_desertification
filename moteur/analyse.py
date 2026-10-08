@@ -6,7 +6,7 @@ import json
 import time
 from pathlib import Path
 
-from moteur.config_modele import LIBELLES_SAISONS, saison
+from moteur.config_modele import EMPRISE_ENTRAINEMENT, LIBELLES_SAISONS, saison
 from moteur.inference import charger_modele, predire_zone
 from moteur.lecture_safe import lire_produit
 from moteur.pretraitement import LecteurProduit
@@ -34,8 +34,33 @@ def zone_depuis_wgs84(lecteur, ouest, sud, est, nord):
     return lig0, col0, lig1, col1
 
 
+def sous_carte(carte, origine, fenetre):
+    """Partie de la carte située dans une fenêtre de pixels de l'image.
+    origine  : (ligne, colonne) du coin haut-gauche de la carte
+    fenetre  : (lig0, col0, lig1, col1) dans l'image entière
+    Renvoie None si la fenêtre ne recoupe pas la carte."""
+    l0, c0 = origine
+    haut, gauche = max(fenetre[0] - l0, 0), max(fenetre[1] - c0, 0)
+    bas = min(fenetre[2] - l0, carte.shape[0])
+    droite = min(fenetre[3] - c0, carte.shape[1])
+    if bas <= haut or droite <= gauche:
+        return None
+    return carte[haut:bas, gauche:droite]
+
+
+def emprise_produit(chemin_zip):
+    """Rectangle (ouest, sud, est, nord) en degrés couvert par l'image."""
+    import rasterio
+    from rasterio.warp import transform_bounds
+    produit = lire_produit(chemin_zip)
+    if not produit.valide:
+        raise ErreurAnalyse(" ; ".join(produit.erreurs))
+    with rasterio.open(produit.chemin_gdal(produit.bandes["B4"])) as src:
+        return tuple(transform_bounds(src.crs, "EPSG:4326", *src.bounds))
+
+
 def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
-             progression=None):
+             progression=None, etape=None):
     """
     Lance une analyse complète et écrit les résultats dans dossier_sortie :
       classes.tif, carte.png, controle.png, statistiques.csv, resume.json
@@ -43,9 +68,13 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
     zone_pixels : (lig0, col0, lig1, col1), ou
     zone_wgs84  : (ouest, sud, est, nord) en degrés.
     Sans zone, toute l'image est traitée.
+    progression(faites, total) suit les fenêtres ; etape(nom) signale
+    le passage aux phases "verification", "segmentation", "resultats".
     Renvoie le résumé (dictionnaire).
     """
+    signaler = etape or (lambda nom: None)
     debut = time.time()
+    signaler("verification")
     produit = lire_produit(chemin_zip)
     if not produit.valide:
         raise ErreurAnalyse(" ; ".join(produit.erreurs))
@@ -61,14 +90,30 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
             zone = tuple(zone_pixels)
         else:
             zone = (0, 0, lecteur.hauteur, lecteur.largeur)
+        # Fenêtre de pixels de la zone de validité du modèle dans cette image
+        try:
+            fenetre_validite = zone_depuis_wgs84(lecteur, *EMPRISE_ENTRAINEMENT)
+        except ErreurAnalyse:
+            fenetre_validite = None
+        signaler("segmentation")
         r = predire_zone(lecteur, modele, *zone, progression=progression)
         transform = resultats.transform_zone(lecteur.transform, r["origine"])
         crs = lecteur.crs
 
+    signaler("resultats")
     carte = r["carte"]
     stats = resultats.statistiques(carte)
     emprise = resultats.emprise_wgs84(carte.shape, transform, crs)
-    hors = resultats.part_hors_entrainement(emprise)
+    hors = resultats.part_hors_entrainement(
+        zone_wgs84 if zone_wgs84 is not None else emprise)
+
+    # Statistiques limitées à la zone de validité, quand la zone analysée
+    # la dépasse : ce sont les seules surfaces fiables.
+    stats_validite = None
+    if hors > 0 and fenetre_validite is not None:
+        partie = sous_carte(carte, r["origine"], fenetre_validite)
+        if partie is not None:
+            stats_validite = resultats.statistiques(partie)
 
     resultats.ecrire_geotiff(carte, dossier / "classes.tif", transform, crs)
     resultats.ecrire_png_carte(carte, dossier / "carte.png")
@@ -95,6 +140,7 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
         "surface_km2": round(carte.size * 100 / 1e6, 2),
         "part_hors_entrainement": hors,
         "statistiques": stats,
+        "statistiques_validite": stats_validite,
         "avertissements": avertissements,
         "duree_secondes": round(time.time() - debut, 1),
     }

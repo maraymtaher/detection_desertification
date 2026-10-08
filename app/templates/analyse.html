@@ -1,0 +1,169 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Analyse n° {{ analyse['id'] }}{% endblock %}
+{% block entete %}Analyse n° {{ analyse['id'] }}{% endblock %}
+{% block soustitre %}Image du {{ analyse['date_acquisition'] }} · tuile {{ analyse['tuile'] }} ·
+  {{ "%.1f" | format(surface) | replace(".", ",") }} km²{% endblock %}
+{% block actions %}{{ statut(analyse['statut']) }}{% endblock %}
+{% block contenu %}
+
+{% if analyse['statut'] in ('en_attente', 'en_cours') %}
+<section class="panneau">
+  <header><h2>Traitement en cours</h2><p>Cette page se met à jour toute seule ; vous pouvez la quitter et revenir.</p></header>
+  <div class="corps">
+    <div class="chaine suivi">
+      <div data-etape="1" class="faite"><b>Import</b>Archive reçue</div>
+      <div data-etape="2" class="faite"><b>Vérification</b>Produit conforme</div>
+      <div data-etape="3"><b>Prétraitement</b>10 bandes et 4 indices</div>
+      <div data-etape="4"><b>Segmentation</b>Modèle U-Net</div>
+      <div data-etape="5"><b>Résultats</b>Carte et statistiques</div>
+    </div>
+    <div class="jauge" style="margin-top:22px"><i id="barre" style="width:{{ analyse['progression'] }}%"></i></div>
+    <div class="suivi-ligne"><span id="message">{{ analyse['message'] or "En attente…" }}</span>
+      <b id="part">{{ analyse['progression'] }} %</b></div>
+  </div>
+</section>
+
+{% elif analyse['statut'] == 'echouee' %}
+<div class="message danger">{{ analyse['message'] }}</div>
+<section class="panneau"><div class="corps">
+  <p style="margin-bottom:14px">L'analyse n'a pas abouti. Vous pouvez relancer une analyse sur la même image.</p>
+  <div style="display:flex; gap:10px; flex-wrap:wrap">
+    <a class="btn btn-principal" href="{{ url_for('analyses.zone', produit_id=analyse['produit_id']) }}">
+      {{ ico("analyse") }} Choisir une zone et relancer</a>
+    <form method="post" action="{{ url_for('analyses.supprimer_analyse', analyse_id=analyse['id']) }}">
+      <input type="hidden" name="jeton" value="{{ jeton() }}">
+      <button class="btn btn-danger">{{ ico("corbeille") }} Supprimer</button></form>
+  </div>
+</div></section>
+
+{% else %}
+{% for a in resume.avertissements %}<div class="message warning">{{ a }}</div>{% endfor %}
+<div class="grille-resultat">
+  <section class="panneau">
+    <header class="avec-reglage"><div><h2>Carte d'occupation du sol</h2>
+      <p>État de la surface au {{ resume.date }}</p></div>
+      <label class="reglage">Opacité
+        <input type="range" id="opacite" min="0" max="100" value="80"></label>
+    </header>
+    <div class="corps">
+      <div id="carte" class="carte haute"></div>
+      <div class="legende">
+        {% for nom, couleur in classes_modele %}
+        <span><i class="pastille" style="background:{{ couleur }}"></i>{{ nom }}</span>
+        {% endfor %}
+      </div>
+    </div>
+  </section>
+
+  <div style="display:grid; gap:20px; align-content:start">
+    <section class="panneau">
+      <header><h2>Surfaces par classe{% if resume.get('statistiques_validite') %} · toute la zone analysée{% endif %}</h2>
+        <p>Calculées sur les pixels valides ({{ resume.statistiques.hectares_valides | round | int }} ha)
+          {%- if resume.get('statistiques_validite') %} · inclut une partie hors validité, non fiable{% endif %}</p></header>
+      <div class="corps">
+        <table class="surfaces">
+          {% for (nom, couleur), c in classes_modele | zip(resume.statistiques.classes) %}
+          <tr>
+            <td><i class="pastille" style="background:{{ couleur }}"></i></td>
+            <td class="nom-classe">{{ nom }}
+              <div class="barre-classe"><i style="width:{{ c.pourcentage }}%; background:{{ couleur }}"></i></div></td>
+            <td class="num">{{ "%.1f" | format(c.hectares) | replace(".", ",") }} ha</td>
+            <td class="num fort">{{ "%.2f" | format(c.pourcentage) | replace(".", ",") }} %</td>
+          </tr>
+          {% endfor %}
+        </table>
+        <p class="note">Part non classée (nuages, données manquantes) :
+          <b>{{ "%.2f" | format(resume.statistiques.part_non_classee) | replace(".", ",") }} %</b></p>
+      </div>
+    </section>
+
+    {% if resume.get('statistiques_validite') %}
+    {% set sv = resume.statistiques_validite %}
+    <section class="panneau fiable">
+      <header><h2>Surfaces dans la zone de validité</h2>
+        <p>Seule partie où le modèle est validé ({{ sv.hectares_valides | round | int }} ha)</p></header>
+      <div class="corps">
+        <table class="surfaces">
+          {% for (nom, couleur), c in classes_modele | zip(sv.classes) %}
+          <tr>
+            <td><i class="pastille" style="background:{{ couleur }}"></i></td>
+            <td class="nom-classe">{{ nom }}
+              <div class="barre-classe"><i style="width:{{ c.pourcentage }}%; background:{{ couleur }}"></i></div></td>
+            <td class="num">{{ "%.1f" | format(c.hectares) | replace(".", ",") }} ha</td>
+            <td class="num fort">{{ "%.2f" | format(c.pourcentage) | replace(".", ",") }} %</td>
+          </tr>
+          {% endfor %}
+        </table>
+      </div>
+    </section>
+    {% endif %}
+
+    <section class="panneau">
+      <header><h2>Informations</h2></header>
+      <div class="corps">
+        <dl class="mesures compact">
+          <div><dt>Saison</dt><dd>{{ resume.saison }}</dd></div>
+          <div><dt>Surface analysée</dt><dd>{{ "%.1f" | format(resume.surface_km2) | replace(".", ",") }} km²</dd></div>
+          <div><dt>Durée du calcul</dt><dd>{{ resume.duree_secondes | round | int }} s</dd></div>
+        </dl>
+        <div class="telechargements">
+          <a class="btn btn-secondaire" href="{{ url_for('analyses.fichier', analyse_id=analyse['id'], nom='classes.tif') }}">GeoTIFF</a>
+          <a class="btn btn-secondaire" href="{{ url_for('analyses.fichier', analyse_id=analyse['id'], nom='statistiques.csv') }}">CSV</a>
+          <a class="btn btn-secondaire" href="{{ url_for('analyses.fichier', analyse_id=analyse['id'], nom='controle.png') }}" target="_blank">Image de contrôle</a>
+        </div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<div class="interpretation">{{ ico("alerte") }}
+  <p><b>Comment lire cette carte.</b> Elle décrit l'état de la surface à une date, selon les cinq
+  classes apprises par le modèle. Elle ne démontre pas à elle seule une désertification : celle-ci
+  s'évalue par la comparaison de plusieurs dates de la même saison. Les classes proviennent de
+  masques automatiques, sans validation de terrain.</p></div>
+
+<form method="post" action="{{ url_for('analyses.supprimer_analyse', analyse_id=analyse['id']) }}"
+      onsubmit="return confirm('Supprimer cette analyse et ses fichiers ?');" style="margin-top:18px">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <button class="btn btn-danger">{{ ico("corbeille") }} Supprimer cette analyse</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if analyse['statut'] in ('en_attente', 'en_cours') %}
+<script src="{{ url_for('static', filename='js/suivi.js') }}"></script>
+<script>suivreAnalyse({{ url_for('analyses.etat', analyse_id=analyse['id']) | tojson }});</script>
+{% elif analyse['statut'] == 'terminee' %}
+<script>
+(function () {
+  const boite = document.getElementById("carte");
+  if (typeof L === "undefined") {
+    boite.classList.add("carte-indisponible");
+    boite.innerHTML = "<p>Carte indisponible : connexion Internet requise pour le fond satellite.</p>";
+    return;
+  }
+  const e = {{ resume.emprise_wgs84 | tojson }};            // ouest, sud, est, nord
+  const bornes = [[e[1], e[0]], [e[3], e[2]]];
+  const carte = L.map("carte");
+  L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 17, attribution: "Imagerie © Esri" }).addTo(carte);
+  const couche = L.imageOverlay(
+    {{ url_for('analyses.fichier', analyse_id=analyse['id'], nom='carte.png') | tojson }},
+    bornes, { opacity: 0.8 }).addTo(carte);
+  L.rectangle(bornes, { color: "#ffffff", weight: 1, fill: false, interactive: false }).addTo(carte);
+  const v = {{ emprise_modele | tojson }};                  // zone de validité du modèle
+  L.rectangle([[v[1], v[0]], [v[3], v[2]]],
+    { color: "#f0a63a", weight: 2, fill: false, interactive: false }).addTo(carte)
+    .bindTooltip("Zone de validité du modèle", { sticky: true });
+  carte.fitBounds(bornes);
+  document.getElementById("opacite").addEventListener("input", function () {
+    couche.setOpacity(this.value / 100);
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

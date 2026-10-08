@@ -69,6 +69,10 @@ def initialiser(app):
     Path(app.config["CHEMIN_BASE"]).parent.mkdir(parents=True, exist_ok=True)
     connexion = connecter(app.config["CHEMIN_BASE"])
     connexion.executescript(SCHEMA)
+    # Évolution du schéma : emprise géographique du produit
+    colonnes = [c["name"] for c in connexion.execute("PRAGMA table_info(produit)")]
+    if "emprise" not in colonnes:
+        connexion.execute("ALTER TABLE produit ADD COLUMN emprise TEXT NOT NULL DEFAULT ''")
     connexion.commit()
     connexion.close()
 

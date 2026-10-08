@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Analyses{% endblock %}
+{% block entete %}Analyses{% endblock %}
+{% block soustitre %}Historique de vos analyses et accès aux cartes de résultats.{% endblock %}
+{% block contenu %}
+<section class="panneau">
+  {% if analyses %}
+  <table class="donnees">
+    <thead><tr><th>N°</th><th>Image</th><th>Tuile</th><th>État</th>
+      <th class="secondaire">Lancée le</th><th></th></tr></thead>
+    <tbody>
+    {% for a in analyses %}
+      <tr>
+        <td class="mono">{{ a['id'] }}</td>
+        <td><b>{{ a['date_acquisition'] }}</b></td>
+        <td class="mono">{{ a['tuile'] }}</td>
+        <td>{{ statut(a['statut']) }}</td>
+        <td class="secondaire" style="color:var(--attenue)">{{ a['cree_le'][:16] }}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire" style="padding:5px 13px"
+            href="{{ url_for('analyses.detail', analyse_id=a['id']) }}">Ouvrir</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucune analyse pour l'instant. Importez une image, choisissez une zone,
+    puis lancez l'analyse.</div>
+  {% endif %}
+</section>
+{% endblock %}

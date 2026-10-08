@@ -1,0 +1,6 @@
+{% macro statut(valeur) %}
+{% if valeur == "terminee" %}<span class="puce ok"><i></i>Terminée</span>
+{% elif valeur == "en_cours" %}<span class="puce info"><i></i>En cours</span>
+{% elif valeur == "en_attente" %}<span class="puce neutre"><i></i>En attente</span>
+{% else %}<span class="puce erreur"><i></i>Échouée</span>{% endif %}
+{% endmacro %}

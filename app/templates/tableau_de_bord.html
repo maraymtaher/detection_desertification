@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
 {% block soustitre %}Vue générale des analyses satellitaires et des résultats disponibles.{% endblock %}
 {% block contenu %}
 <div class="indicateurs">
@@ -51,6 +52,24 @@
     </div>
   </div>
 </section>
+
+{% if analyses %}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Analyses récentes</h2><p>Les cinq dernières ·
+    <a href="{{ url_for('analyses.liste') }}">voir tout l'historique</a></p></header>
+  <table class="donnees" style="margin-top:8px">
+    <thead><tr><th>N°</th><th>Image</th><th>Tuile</th><th>État</th><th></th></tr></thead>
+    <tbody>
+    {% for a in analyses %}
+      <tr><td class="mono">{{ a['id'] }}</td><td><b>{{ a['date_acquisition'] }}</b></td>
+        <td class="mono">{{ a['tuile'] }}</td><td>{{ statut(a['statut']) }}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire" style="padding:5px 13px"
+          href="{{ url_for('analyses.detail', analyse_id=a['id']) }}">Ouvrir</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 
 <section class="panneau" style="margin-top:20px">
   <header><h2>Images importées</h2><p>{{ chiffres.produits }} produit(s) Sentinel-2 dans votre espace</p></header>

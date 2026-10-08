@@ -62,10 +62,18 @@ def image_classes(carte):
     return img
 
 
-def ecrire_png_carte(carte, chemin):
+def _reduire(tableau, cote_max):
+    """Sous-échantillonne un tableau trop grand (un pixel sur n) pour
+    l'affichage. Le GeoTIFF, lui, reste toujours en pleine résolution."""
+    pas = max(1, -(-max(tableau.shape[0], tableau.shape[1]) // cote_max))
+    return tableau[::pas, ::pas]
+
+
+def ecrire_png_carte(carte, chemin, cote_max=4096):
     """PNG pour la carte web : une couleur par classe, pixels non classés
-    transparents."""
+    transparents. Limité à cote_max pixels de côté pour rester léger."""
     from PIL import Image
+    carte = _reduire(carte, cote_max)
     rgba = np.zeros(carte.shape + (4,), dtype=np.uint8)
     rgba[..., :3] = image_classes(carte)
     rgba[..., 3] = np.where(carte == NON_CLASSE, 0, 255)
@@ -73,9 +81,10 @@ def ecrire_png_carte(carte, chemin):
     return chemin
 
 
-def enregistrer_controle(rgb, carte, chemin, titre=""):
+def enregistrer_controle(rgb, carte, chemin, titre="", cote_max=2048):
     """Image PNG : vraies couleurs à gauche, classification à droite,
     légende en dessous. Sert au contrôle visuel."""
+    rgb, carte = _reduire(rgb, cote_max), _reduire(carte, cote_max)
     import unicodedata
     from PIL import Image, ImageDraw, ImageFont
 

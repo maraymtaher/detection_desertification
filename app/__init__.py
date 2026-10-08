@@ -50,8 +50,22 @@ def creer_app(surcharge=None):
 
     app.jinja_env.globals["jeton"] = jeton
 
+    # --- Données du modèle disponibles dans toutes les pages ---
+    from moteur import config_modele as cm
+    app.jinja_env.globals["classes_modele"] = list(zip(cm.CLASSES, cm.COULEURS))
+    app.jinja_env.globals["emprise_modele"] = list(cm.EMPRISE_ENTRAINEMENT)
+    app.jinja_env.globals["tuiles_modele"] = sorted(cm.TUILES_ENTRAINEMENT)
+    app.jinja_env.filters["zip"] = lambda a, b: list(zip(a, b))
+    app.jinja_env.globals["nom_systeme"] = config.NOM_SYSTEME
+    app.jinja_env.globals["sous_titre"] = config.SOUS_TITRE
+    app.jinja_env.globals["surface_max"] = config.SURFACE_MAX_KM2
+
     from app.routes import analyses, auth, main
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
     app.register_blueprint(analyses.bp)
+
+    if app.config.get("LANCER_EXECUTANT", True):
+        from app import taches
+        taches.demarrer(app)
     return app

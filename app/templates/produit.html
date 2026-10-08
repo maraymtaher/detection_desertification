@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
 {% block titre %}Image du {{ produit['date_acquisition'] }}{% endblock %}
 {% block entete %}Image du {{ produit['date_acquisition'] }}{% endblock %}
 {% block soustitre %}Tuile {{ produit['tuile'] }} · produit vérifié et prêt pour l'analyse.{% endblock %}
@@ -28,9 +29,9 @@
     <section class="panneau">
       <header><h2>Lancer le traitement</h2><p>Choix de la zone, puis segmentation par le modèle</p></header>
       <div class="corps">
-        <p class="note" style="margin:0 0 14px">Cette fonction arrive à l'étape suivante du développement.</p>
         <div style="display:flex; gap:10px; flex-wrap:wrap">
-          <span class="btn btn-principal inactif">{{ ico("analyse") }} Choisir une zone et analyser</span>
+          <a class="btn btn-principal" href="{{ url_for('analyses.zone', produit_id=produit['id']) }}">
+            {{ ico("analyse") }} Choisir une zone et analyser</a>
           <form method="post" action="{{ url_for('analyses.supprimer', produit_id=produit['id']) }}"
                 onsubmit="return confirm('Supprimer cette image et son archive ?');">
             <input type="hidden" name="jeton" value="{{ jeton() }}">
@@ -40,10 +41,23 @@
       </div>
     </section>
   </div>
+  <div style="display:grid; gap:20px; align-content:start">
   <section class="panneau">
     <header><h2>Emprise de la tuile</h2><p>Contour blanc : tuile de cette image</p></header>
-    <div class="corps"><div id="carte" class="carte" style="height:360px"></div></div>
+    <div class="corps"><div id="carte" class="carte" style="height:320px"></div></div>
   </section>
+  {% if analyses %}
+  <section class="panneau">
+    <header><h2>Analyses de cette image</h2></header>
+    <table class="donnees" style="margin-top:8px">
+      {% for a in analyses %}
+      <tr><td class="mono">n° {{ a['id'] }}</td><td>{{ statut(a['statut']) }}</td>
+        <td style="text-align:right"><a href="{{ url_for('analyses.detail', analyse_id=a['id']) }}">Ouvrir</a></td></tr>
+      {% endfor %}
+    </table>
+  </section>
+  {% endif %}
+  </div>
 </div>
 {% endblock %}
 {% block scripts %}
