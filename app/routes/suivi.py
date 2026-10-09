@@ -9,7 +9,9 @@ from app import geometrie, taches
 from app.modeles_bd import bd
 from app.routes.auth import connexion_requise
 
-FICHIERS = {"changement.png", "changement.tif", "serie.csv", "transitions.csv"}
+CARTES = ("synthese", "occupation", "progression", "productivite")
+FICHIERS = ({f"{c}.png" for c in CARTES} | {f"{c}.tif" for c in CARTES}
+            | {"ndvi_pente.tif", "serie.csv", "transitions.csv"})
 
 bp = Blueprint("suivi", __name__)
 
@@ -115,6 +117,22 @@ def fichier(suivi_id, nom):
         abort(404)
     return send_from_directory(suivi["dossier"], nom,
                                as_attachment=nom.endswith((".tif", ".csv")))
+
+
+@bp.route("/suivi/<int:suivi_id>/relancer", methods=["POST"])
+@connexion_requise
+def relancer(suivi_id):
+    """Recalcule un suivi (par exemple après une mise à jour de la méthode)."""
+    suivi = suivi_ou_404(suivi_id)
+    if suivi["statut"] in ("en_attente", "en_cours"):
+        return redirect(url_for("suivi.detail", suivi_id=suivi_id))
+    if suivi["dossier"]:
+        shutil.rmtree(suivi["dossier"], ignore_errors=True)
+    bd().execute("UPDATE suivi SET statut = 'en_attente', progression = 0, message = '', "
+                 "resume = '' WHERE id = ?", (suivi_id,))
+    bd().commit()
+    taches.ajouter_suivi(suivi_id)
+    return redirect(url_for("suivi.detail", suivi_id=suivi_id))
 
 
 @bp.route("/suivi/<int:suivi_id>/supprimer", methods=["POST"])

@@ -89,9 +89,9 @@ def _executer_suivi(chemin_base, dossier_resultats, suivi_id):
     numeros = [int(v) for v in ligne["analyses"].split(",")]
     marques = ",".join("?" * len(numeros))
     analyses = connexion.execute(
-        "SELECT a.id, a.dossier, a.statut, p.date_acquisition FROM analyse a "
-        f"JOIN produit p ON p.id = a.produit_id WHERE a.id IN ({marques})",
-        numeros).fetchall()
+        "SELECT a.id, a.dossier, a.statut, a.resume, p.date_acquisition, p.chemin "
+        f"FROM analyse a JOIN produit p ON p.id = a.produit_id WHERE a.id IN ({marques}) "
+        "ORDER BY p.date_acquisition", numeros).fetchall()
     connexion.close()
 
     dossier = Path(dossier_resultats) / f"suivi_{suivi_id}"
@@ -105,9 +105,30 @@ def _executer_suivi(chemin_base, dossier_resultats, suivi_id):
         if len(analyses) != len(numeros) or any(a["statut"] != "terminee" for a in analyses):
             raise moteur_serie.ErreurSerie(
                 "Une des analyses du suivi a été supprimée ou n'est pas terminée.")
-        entrees = [(a["date_acquisition"], str(Path(a["dossier"]) / "classes.tif"))
-                   for a in analyses]
-        resume = moteur_serie.analyser_serie(entrees, dossier, etape=etape)
+        # NDVI de chaque date, calculé une seule fois puis conservé
+        # dans le dossier de l'analyse
+        from moteur.productivite import calculer_ndvi
+        entrees = []
+        for i, a in enumerate(analyses):
+            classes = Path(a["dossier"]) / "classes.tif"
+            ndvi = Path(a["dossier"]) / "ndvi.tif"
+            if not ndvi.exists():
+                zone = json.loads(a["resume"])["zone_pixels"]
+                if not Path(a["chemin"]).exists():
+                    raise moteur_serie.ErreurSerie(
+                        f"Archive de l'image du {a['date_acquisition']} introuvable : "
+                        "impossible de calculer son NDVI.")
+                etape(f"Calcul du NDVI du {a['date_acquisition']} ({i + 1}/{len(analyses)})",
+                      int(40 * i / len(analyses)))
+                provisoire = ndvi.with_suffix(".tmp.tif")
+                calculer_ndvi(a["chemin"], zone, provisoire)
+                provisoire.replace(ndvi)
+            entrees.append((a["date_acquisition"], str(classes), str(ndvi)))
+
+        def etape_serie(texte, part):
+            etape(texte, 40 + int(0.6 * part))
+
+        resume = moteur_serie.analyser_serie(entrees, dossier, etape=etape_serie)
         _maj(chemin_base, suivi_id, "suivi", statut="terminee", progression=100,
              message="Suivi terminé", resume=json.dumps(resume, ensure_ascii=False))
     except moteur_serie.ErreurSerie as e:

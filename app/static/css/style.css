@@ -334,3 +334,18 @@ table.serie th.num, table.serie td.num { text-align: right; white-space: nowrap;
 table.serie td.num { font-variant-numeric: tabular-nums; }
 table.serie td small { color: var(--attenue); margin-left: 6px; }
 table.serie th, table.serie td { padding-left: 12px; padding-right: 12px; }
+.indicateur .rond.rouge { background: var(--rouge-doux); color: var(--rouge); }
+.indicateur .rond.neutre { background: var(--panneau-doux); color: var(--attenue); }
+.lecture { margin-top: 4px; font-size: 14.5px; line-height: 1.65; }
+.onglets { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.onglets button { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; cursor: pointer;
+                  border: 1px solid var(--ligne); background: var(--panneau); color: var(--texte); }
+.onglets button:hover { border-color: var(--accent); }
+.onglets button.actif { background: var(--accent); border-color: var(--accent); color: #fff; }
+.onglets.compact { margin-bottom: 0; }
+.boite-graphique.petite { height: 260px; margin-bottom: 0; }
+.sous-titre { font-size: 14px; font-weight: 700; margin: 6px 0 8px; }
+.sous-titre:not(:first-child) { margin-top: 22px; }
+table.serie tr.ligne-fusion td { background: var(--panneau-doux); font-style: italic; }
+table.serie td.diagonale { font-weight: 700; }
+.methode ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 14px; line-height: 1.6; }

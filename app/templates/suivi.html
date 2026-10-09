@@ -2,16 +2,61 @@
 {% from "_icones.html" import ico %}
 {% from "_statut.html" import statut %}
 {% macro nb(v, d=1) %}{{ ("%." ~ d ~ "f") | format(v) | replace(".", ",") }}{% endmacro %}
+{% macro ha(v) %}{{ "{:,}".format(v | round | int) | replace(",", " ") }}{% endmacro %}
+{% macro signe_ha(v) %}{{ "+" if v > 0 else "" }}{{ ha(v) }}{% endmacro %}
+{% macro valeur_p(p) %}{% if p is none %}—{% elif p < 0.001 %}&lt; 0,001{% else %}{{ nb(p, 3) }}{% endif %}{% endmacro %}
+
+{% macro table_tendances(liste, couleurs) %}
+<table class="donnees serie">
+  <thead><tr><th>Classe</th><th class="num">Première → dernière date</th>
+    <th class="num">Pente de Sen</th><th class="num">Tau</th><th class="num">p</th><th>Conclusion du test</th></tr></thead>
+  <tbody>
+  {% for t in liste if t %}
+    {% set c = resume.classes.index(t.classe) %}
+    <tr{% if loop.last %} class="ligne-fusion"{% endif %}>
+      <td><i class="pastille" style="background:{{ couleurs[c] }}"></i> {{ t.classe }}</td>
+      <td class="num">{{ signe_ha(t.variation_ha) }} ha</td>
+      <td class="num">{% if t.pente_ha_par_an is not none %}{{ signe_ha(t.pente_ha_par_an) }} ha/an{% else %}—{% endif %}</td>
+      <td class="num">{% if t.tau is not none %}{{ nb(t.tau, 2) }}{% else %}—{% endif %}</td>
+      <td class="num">{{ valeur_p(t.p) }}</td>
+      <td>{% if t.sens.startswith('pas') %}{{ t.sens }}{% else %}<b>{{ t.sens }}</b>{% endif %}</td>
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+{% macro table_surfaces(lignes, debut) %}
+<table class="donnees serie">
+  <thead><tr><th>Date</th>{% for nom in resume.classes[debut:] %}<th class="num">{{ nom }}</th>{% endfor %}</tr></thead>
+  <tbody>
+  {% for s in lignes %}
+    <tr><td class="mono">{{ s.date }}</td>
+      {% for h in s.hectares[debut:] %}<td class="num">{{ ha(h) }} <small>{{ nb(s.pourcentages[loop.index0 + debut]) }} %</small></td>{% endfor %}</tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
 {% block titre %}Suivi n° {{ suivi['id'] }}{% endblock %}
 {% block entete %}Suivi temporel n° {{ suivi['id'] }}{% endblock %}
 {% block soustitre %}Tuile {{ suivi['tuile'] }} · {{ nb(surface) }} km²
   {%- if resume %} · {{ resume.nb_dates }} dates, du {{ resume.dates[0] }} au {{ resume.dates[-1] }}{% endif %}{% endblock %}
-{% block actions %}{{ statut(suivi['statut']) }}{% endblock %}
+{% block actions %}
+{{ statut(suivi['statut']) }}
+{% if suivi['statut'] in ('terminee', 'echouee') %}
+<form method="post" action="{{ url_for('suivi.relancer', suivi_id=suivi['id']) }}">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <button class="btn btn-secondaire" style="padding:5px 13px">{{ ico("historique") }} Recalculer</button>
+</form>
+{% endif %}
+{% endblock %}
 {% block contenu %}
 
 {% if suivi['statut'] in ('en_attente', 'en_cours') %}
 <section class="panneau">
-  <header><h2>Calcul en cours</h2><p>Cette page se met à jour toute seule.</p></header>
+  <header><h2>Calcul en cours</h2>
+    <p>Au premier calcul, le NDVI de chaque date est lu dans les archives ; il est ensuite conservé.</p></header>
   <div class="corps">
     <div class="jauge"><i id="barre" style="width:{{ suivi['progression'] }}%"></i></div>
     <div class="suivi-ligne"><span id="message">{{ suivi['message'] or "En attente…" }}</span>
@@ -22,135 +67,188 @@
 {% elif suivi['statut'] == 'echouee' %}
 <div class="message danger">{{ suivi['message'] }}</div>
 
+{% elif resume.get('version') != 2 %}
+<div class="message warning">Ce suivi a été calculé avec l'ancienne méthode (occupation du sol seule).
+  Cliquez sur « Recalculer » pour obtenir la productivité (NDVI), la terre ferme, les terres nues,
+  l'évolution progressive et la synthèse.</div>
+
 {% else %}
+{% set b = resume.bilans %}
+{% set couleurs = (classes_modele | map(attribute=1) | list) + ["#b98b4e"] %}
 {% for a in resume.avertissements %}<div class="message warning">{{ a }}</div>{% endfor %}
 
-<section class="panneau" style="margin-bottom:20px">
-  <header><h2>Surface de chaque classe au fil des dates</h2>
-    <p>Calculée sur les pixels classés à toutes les dates :
-      {{ resume.hectares_communs | round | int }} ha, soit {{ nb(resume.part_commune) }} % de la zone</p></header>
+{# ---------------- 1. Résultat ---------------- #}
+{% if b.synthese.disponible %}
+{% set s = b.synthese.categories %}
+<section class="panneau">
+  <header><h2>Résultat de la détection</h2>
+    <p>Terre ferme comparable : {{ ha(b.synthese.hectares_compares) }} ha · deux indicateurs combinés selon la
+      règle UNCCD « un dehors, tous dehors » · période {{ resume.dates[0][:4] }}–{{ resume.dates[-1][:4] }}</p></header>
+  <div class="corps">
+    <div class="indicateurs">
+      <div class="indicateur"><span class="rond rouge">{{ ico("alerte") }}</span>
+        <div><div class="nombre">{{ nb(s[0].pourcentage + s[1].pourcentage) }} %</div>
+          <div class="nom">Dégradation (au moins un indicateur) · {{ ha(s[0].hectares + s[1].hectares) }} ha</div></div></div>
+      <div class="indicateur"><span class="rond rouge">{{ ico("coche") }}</span>
+        <div><div class="nombre">{{ nb(s[0].pourcentage) }} %</div>
+          <div class="nom">Dégradation confirmée par les deux · {{ ha(s[0].hectares) }} ha</div></div></div>
+      <div class="indicateur"><span class="rond">{{ ico("fleche") }}</span>
+        <div><div class="nombre">{{ nb(s[2].pourcentage) }} %</div>
+          <div class="nom">Amélioration · {{ ha(s[2].hectares) }} ha</div></div></div>
+      <div class="indicateur"><span class="rond neutre">{{ ico("carte") }}</span>
+        <div><div class="nombre">{{ nb(s[3].pourcentage) }} %</div>
+          <div class="nom">Stable · {{ ha(s[3].hectares) }} ha</div></div></div>
+    </div>
+    <p class="lecture">
+      Sur la terre ferme, <b>{{ nb(s[0].pourcentage + s[1].pourcentage) }} %</b> de la surface montre une dégradation
+      selon au moins un indicateur, dont <b>{{ nb(s[0].pourcentage) }} %</b> confirmée à la fois par l'occupation du sol
+      et par la productivité ; <b>{{ nb(s[2].pourcentage) }} %</b> montre une amélioration.
+      {% if resume.ndvi %}Le NDVI médian de la terre ferme passe de {{ nb(resume.ndvi.medianes[0], 3) }}
+      à {{ nb(resume.ndvi.medianes[-1], 3) }}
+      ({% if resume.ndvi.p is not none and resume.ndvi.p < resume.niveau_signification %}tendance significative,
+      p {{ valeur_p(resume.ndvi.p) }}{% else %}pas de tendance significative, p = {{ valeur_p(resume.ndvi.p) }}{% endif %}).{% endif %}
+      {% if resume.persistance is not none %}{{ nb(resume.persistance) }} % des pertes de couverture végétale
+      entre le début et la fin se confirment d'année en année.{% endif %}
+    </p>
+  </div>
+</section>
+{% endif %}
+
+{# ---------------- 2. Cartes ---------------- #}
+<section class="panneau" style="margin-top:20px">
+  <header class="avec-reglage"><div><h2>Cartes de détection</h2>
+    <p>Début ({{ resume.periode_debut | join(", ") }}) · fin ({{ resume.periode_fin | join(", ") }})</p></div>
+    <label class="reglage">Opacité <input type="range" id="opacite" min="0" max="100" value="90"></label>
+  </header>
+  <div class="corps">
+    <div class="onglets" id="choix-carte">
+      {% for nom in ("synthese", "occupation", "progression", "productivite") if b[nom].disponible %}
+      <button type="button" data-carte="{{ nom }}" class="{{ 'actif' if loop.first }}">{{ b[nom].titre }}</button>
+      {% endfor %}
+    </div>
+    <div class="grille-resultat">
+      <div id="carte" class="carte haute"></div>
+      <div>
+        {% for nom in ("synthese", "occupation", "progression", "productivite") if b[nom].disponible %}
+        <div class="{{ 'd-none' if not loop.first }}" data-bilan="{{ nom }}">
+          <p class="note" style="margin:0 0 8px">Sur {{ ha(b[nom].hectares_compares) }} ha comparables</p>
+          <table class="surfaces">
+            {% for c in b[nom].categories %}
+            <tr>
+              <td><i class="pastille" style="background:{{ c.couleur }}"></i></td>
+              <td class="nom-classe">{{ c.nom }}
+                <div class="barre-classe"><i style="width:{{ c.pourcentage }}%; background:{{ c.couleur }}"></i></div></td>
+              <td class="num">{{ ha(c.hectares) }} ha</td>
+              <td class="num fort">{{ nb(c.pourcentage, 2) }} %</td>
+            </tr>
+            {% endfor %}
+          </table>
+          <div class="telechargements">
+            <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom=nom ~ '.tif') }}">GeoTIFF</a>
+            {% if nom == "productivite" %}<a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='ndvi_pente.tif') }}">Pente du NDVI</a>{% endif %}
+          </div>
+        </div>
+        {% endfor %}
+        <p class="note">Les pixels stables ne sont pas colorés sur la carte.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+{# ---------------- 3. Productivité ---------------- #}
+{% if resume.ndvi %}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Productivité : NDVI médian de la terre ferme</h2>
+    <p>Mesuré directement sur les images, indépendamment du modèle · Mann-Kendall ({{ resume.ndvi.methode }}),
+      p {{ valeur_p(resume.ndvi.p) }} · pente de Sen
+      {{ "%+.4f" | format(resume.ndvi.pente_par_an) | replace(".", ",") }} par an</p></header>
+  <div class="corps"><div class="boite-graphique petite"><canvas id="graphique-ndvi"></canvas></div></div>
+</section>
+{% endif %}
+
+{# ---------------- 4. Surfaces ---------------- #}
+<section class="panneau" style="margin-top:20px">
+  <header class="avec-reglage"><div><h2>Surface de chaque classe au fil des dates</h2>
+    <p id="legende-surfaces">Toute la zone : pixels classés aux {{ resume.nb_dates }} dates, {{ ha(resume.hectares_communs) }} ha
+      ({{ nb(resume.part_commune) }} % de la zone)</p></div>
+    <div class="onglets compact" id="choix-surface">
+      <button type="button" data-vue="zone" class="actif">Toute la zone</button>
+      <button type="button" data-vue="terre">Terre ferme</button>
+    </div>
+  </header>
   <div class="corps">
     <div class="boite-graphique"><canvas id="graphique"></canvas></div>
-    <div class="defile">
-    <table class="donnees serie">
-      <thead><tr><th>Date</th>{% for nom, couleur in classes_modele %}
-        <th class="num"><i class="pastille" style="background:{{ couleur }}"></i> {{ nom }}</th>{% endfor %}</tr></thead>
-      <tbody>
-      {% for s in resume.serie %}
-        <tr><td class="mono">{{ s.date }}</td>
-          {% for h, p in s.hectares | zip(s.pourcentages) %}
-          <td class="num">{{ h | round | int }} ha <small>{{ nb(p) }} %</small></td>{% endfor %}</tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    </div>
+    <div class="defile" data-vue-bloc="zone">{{ table_surfaces(resume.serie, 0) }}</div>
+    <div class="defile d-none" data-vue-bloc="terre">{{ table_surfaces(resume.serie_terre, 1) }}</div>
   </div>
 </section>
 
-<section class="panneau" style="margin-bottom:20px">
+{# ---------------- 5. Tendances ---------------- #}
+<section class="panneau" style="margin-top:20px">
   <header><h2>Tendance par classe</h2>
-    <p>Test de Mann-Kendall et pente de Sen · tendance retenue si p &lt; {{ resume.niveau_signification }}</p></header>
+    <p>Test de Mann-Kendall et pente de Sen · tendance retenue si p &lt; {{ resume.niveau_signification }} ·
+      « Terres nues » regroupe sol nu et sable/dune, les deux classes que le modèle confond le plus</p></header>
   <div class="corps defile">
-    <table class="donnees serie">
-      <thead><tr><th>Classe</th><th class="num">Variation première → dernière date</th>
-        <th class="num">Pente de Sen</th><th class="num">Tau de Kendall</th>
-        <th class="num">p</th><th>Conclusion du test</th></tr></thead>
-      <tbody>
-      {% for (nom, couleur), t in classes_modele | zip(resume.tendances) %}
-        <tr><td><i class="pastille" style="background:{{ couleur }}"></i> {{ nom }}</td>
-          <td class="num">{{ "%+d" | format(t.variation_ha | round | int) }} ha</td>
-          <td class="num">{% if t.pente_ha_par_an is not none %}{{ "%+d" | format(t.pente_ha_par_an | round | int) }} ha/an{% else %}—{% endif %}</td>
-          <td class="num">{% if t.tau is not none %}{{ nb(t.tau, 2) }}{% else %}—{% endif %}</td>
-          <td class="num">{% if t.p is none %}—{% elif t.p < 0.001 %}&lt; 0,001{% else %}{{ nb(t.p, 3) }}{% endif %}</td>
-          <td>{% if 'baisse' in t.sens or 'hausse' in t.sens %}<b>{{ t.sens }}</b>{% else %}{{ t.sens }}{% endif %}</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+    <h3 class="sous-titre">Toute la zone</h3>
+    {{ table_tendances(resume.tendances, couleurs) }}
+    <h3 class="sous-titre">Terre ferme (pixels jamais classés en eau : {{ ha(resume.hectares_terre) }} ha)</h3>
+    {{ table_tendances(resume.tendances_terre, couleurs) }}
   </div>
 </section>
 
-<div class="grille-resultat">
-  <section class="panneau">
-    <header class="avec-reglage"><div><h2>Carte des changements</h2>
-      <p>Début ({{ resume.periode_debut | join(", ") }}) comparé à la fin ({{ resume.periode_fin | join(", ") }})</p></div>
-      <label class="reglage">Opacité
-        <input type="range" id="opacite" min="0" max="100" value="90"></label>
-    </header>
-    <div class="corps">
-      <div id="carte" class="carte haute"></div>
-      <div class="legende">
-        {% for c in resume.categories[1:] %}
-        <span><i class="pastille" style="background:{{ c.couleur }}"></i>{{ c.nom }}</span>
-        {% endfor %}
-        <span>Les pixels stables ne sont pas colorés.</span>
-      </div>
-    </div>
-  </section>
-
-  <div style="display:grid; gap:20px; align-content:start">
-    <section class="panneau">
-      <header><h2>Bilan des changements</h2>
-        <p>Sur {{ resume.hectares_compares | round | int }} ha comparables</p></header>
-      <div class="corps">
-        <table class="surfaces">
-          {% for c in resume.categories %}
-          <tr>
-            <td><i class="pastille" style="background:{{ c.couleur }}"></i></td>
-            <td class="nom-classe">{{ c.nom }}
-              <div class="barre-classe"><i style="width:{{ c.pourcentage }}%; background:{{ c.couleur }}"></i></div></td>
-            <td class="num">{{ nb(c.hectares) }} ha</td>
-            <td class="num fort">{{ nb(c.pourcentage, 2) }} %</td>
-          </tr>
-          {% endfor %}
-        </table>
-        {% if resume.periode_debut | length > 1 %}
-        <p class="note">Chaque état est la classe majoritaire de {{ resume.periode_debut | length }} dates,
-          pour limiter l'effet d'une erreur de classification isolée.</p>
-        {% endif %}
-        <div class="telechargements">
-          <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='changement.tif') }}">GeoTIFF</a>
-          <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='serie.csv') }}">Série (CSV)</a>
-          <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='transitions.csv') }}">Transitions (CSV)</a>
-        </div>
-      </div>
-    </section>
-  </div>
-</div>
-
+{# ---------------- 6. Matrice ---------------- #}
 <section class="panneau" style="margin-top:20px">
   <header><h2>Matrice de transition</h2>
-    <p>Surfaces en hectares · lignes : classe au début · colonnes : classe à la fin</p></header>
+    <p>Hectares · lignes : classe au début · colonnes : classe à la fin</p></header>
   <div class="corps defile">
     <table class="donnees serie">
       <thead><tr><th>Début \ Fin</th>{% for nom, couleur in classes_modele %}<th class="num">{{ nom }}</th>{% endfor %}</tr></thead>
       <tbody>
       {% for (nom, couleur), ligne in classes_modele | zip(resume.transitions) %}
+        {% set i = loop.index0 %}
         <tr><td><i class="pastille" style="background:{{ couleur }}"></i> {{ nom }}</td>
-          {% for v in ligne %}<td class="num">{{ v | round | int }}</td>{% endfor %}</tr>
+          {% for v in ligne %}<td class="num{{ ' diagonale' if loop.index0 == i }}">{{ ha(v) }}</td>{% endfor %}</tr>
       {% endfor %}
       </tbody>
     </table>
+    <div class="telechargements">
+      <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='serie.csv') }}">Séries (CSV)</a>
+      <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='transitions.csv') }}">Transitions (CSV)</a>
+    </div>
   </div>
 </section>
 
-<div class="interpretation">{{ ico("alerte") }}
-  <p><b>Comment lire ces résultats.</b> Une dégradation est ici un passage vers une classe de
-  moindre couverture végétale (végétation saine → végétation clairsemée → sol nu → sable/dune) ;
-  c'est une règle de lecture du projet. Les changements liés à l'eau suivent surtout le niveau
-  du lac et sont comptés à part. Les cartes viennent d'un modèle dont l'exactitude mesurée est
-  de 0,765 : une partie des changements affichés est due à des erreurs de classification.
-  Ces résultats décrivent une évolution de l'occupation du sol ; ils ne suffisent pas à eux
-  seuls à établir une désertification, qui dépend aussi du climat et de la productivité des terres.</p></div>
-
-<form method="post" action="{{ url_for('suivi.supprimer', suivi_id=suivi['id']) }}"
-      onsubmit="return confirm('Supprimer ce suivi ?');" style="margin-top:18px">
-  <input type="hidden" name="jeton" value="{{ jeton() }}">
-  <button class="btn btn-danger">{{ ico("corbeille") }} Supprimer ce suivi</button>
-</form>
+{# ---------------- 7. Méthode ---------------- #}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Méthode et limites</h2></header>
+  <div class="corps methode">
+    <ol>
+      <li><b>Occupation du sol.</b> Chaque date est classée par le U-Net. L'état de début et l'état de fin sont
+        {% if resume.periode_debut | length > 1 %}la classe majoritaire de {{ resume.periode_debut | length }} dates{% else %}la première et la dernière date{% endif %}.
+        Une dégradation est un passage vers une classe de moindre couverture végétale
+        (végétation saine → végétation clairsemée → sol nu → sable/dune) : c'est une règle du projet.</li>
+      <li><b>Productivité.</b> Tendance du NDVI de chaque pixel : test de Mann-Kendall (loi exacte,
+        |S| ≥ {{ resume.seuil_s_pixel }} pour {{ resume.nb_dates }} dates) et pente de Sen. Le NDVI est mesuré
+        directement sur les images ; il ne dépend pas des erreurs du modèle.</li>
+      <li><b>Synthèse.</b> Règle « un dehors, tous dehors » de l'indicateur ODD 15.3.1 (UNCCD) : un pixel est dégradé
+        si au moins un indicateur le dit. Le troisième sous-indicateur de l'UNCCD, le carbone organique du sol,
+        n'est pas mesurable avec Sentinel-2.</li>
+      <li><b>Évolution progressive.</b> Test de Mann-Kendall sur le rang de couverture végétale de chaque pixel,
+        date après date : il distingue une perte qui se confirme d'année en année d'un changement isolé.</li>
+      <li><b>Terre ferme.</b> Les pixels classés en eau à au moins une date sont exclus des indicateurs, car le
+        niveau du lac varie d'une année à l'autre.</li>
+      <li><b>Limites.</b> Les classes viennent de masques automatiques, sans vérité terrain ; l'exactitude mesurée
+        du modèle est de 0,765 (0,850 en regroupant sol nu et sable). Le modèle a été entraîné sur 2017–2023 :
+        il est probablement plus juste sur ces années. Une seule saison est observée, et la pluie de chaque année
+        n'est pas prise en compte.</li>
+    </ol>
+  </div>
+</section>
 {% endif %}
 
-{% if suivi['statut'] == 'echouee' %}
-<form method="post" action="{{ url_for('suivi.supprimer', suivi_id=suivi['id']) }}">
+{% if suivi['statut'] != 'en_cours' %}
+<form method="post" action="{{ url_for('suivi.supprimer', suivi_id=suivi['id']) }}"
+      onsubmit="return confirm('Supprimer ce suivi ?');" style="margin-top:18px">
   <input type="hidden" name="jeton" value="{{ jeton() }}">
   <button class="btn btn-danger">{{ ico("corbeille") }} Supprimer ce suivi</button>
 </form>
@@ -161,64 +259,109 @@
 {% if suivi['statut'] in ('en_attente', 'en_cours') %}
 <script src="{{ url_for('static', filename='js/suivi.js') }}"></script>
 <script>suivreAnalyse({{ url_for('suivi.etat', suivi_id=suivi['id']) | tojson }});</script>
-{% elif suivi['statut'] == 'terminee' %}
+{% elif suivi['statut'] == 'terminee' and resume.get('version') == 2 %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 (function () {
   const resume = {{ resume | tojson }};
-  const couleurs = {{ classes_modele | map(attribute=1) | list | tojson }};
+  const couleurs = {{ classes_modele | map(attribute=1) | list | tojson }}.concat(["#b98b4e"]);
+  const urlCarte = {{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='__NOM__.png') | tojson }};
 
-  // --- Courbes des surfaces ---
-  const toile = document.getElementById("graphique");
-  if (typeof Chart === "undefined") {
-    toile.parentNode.style.height = "auto";
-    toile.parentNode.innerHTML = "<p class='note'>Graphique indisponible sans connexion Internet : " +
-      "les valeurs sont dans le tableau ci-dessous.</p>";
-  } else {
-    const style = getComputedStyle(document.documentElement);
-    const texte = style.getPropertyValue("--attenue").trim();
-    const ligne = style.getPropertyValue("--ligne").trim();
-    new Chart(toile, {
-      type: "line",
-      data: {
-        labels: resume.dates,
-        datasets: resume.classes.map(function (nom, c) {
-          return { label: nom, data: resume.serie.map(function (s) { return s.hectares[c]; }),
-                   borderColor: couleurs[c], backgroundColor: couleurs[c],
-                   borderWidth: 2, pointRadius: 4, tension: 0 };
-        })
-      },
-      options: {
-        maintainAspectRatio: false,
-        interaction: { mode: "index", intersect: false },
-        plugins: { legend: { labels: { color: texte, usePointStyle: true } } },
-        scales: {
-          x: { ticks: { color: texte }, grid: { color: ligne } },
-          y: { title: { display: true, text: "Surface (ha)", color: texte },
-               ticks: { color: texte }, grid: { color: ligne }, beginAtZero: true }
-        }
-      }
+  function onglets(idGroupe, attribut, rappel) {
+    const boutons = document.querySelectorAll("#" + idGroupe + " button");
+    boutons.forEach(function (b) {
+      b.addEventListener("click", function () {
+        boutons.forEach(function (x) { x.classList.toggle("actif", x === b); });
+        rappel(b.getAttribute(attribut));
+      });
     });
   }
 
-  // --- Carte des changements ---
+  // --- Graphiques ---
+  let graphique = null;
+  const style = getComputedStyle(document.documentElement);
+  const texte = style.getPropertyValue("--attenue").trim();
+  const ligne = style.getPropertyValue("--ligne").trim();
+  function axes(titre) {
+    return { x: { ticks: { color: texte }, grid: { color: ligne } },
+             y: { title: { display: true, text: titre, color: texte }, ticks: { color: texte },
+                  grid: { color: ligne } } };
+  }
+  function tracerSurfaces(vue) {
+    if (typeof Chart === "undefined") { return; }
+    const lignes = vue === "terre" ? resume.serie_terre : resume.serie;
+    const debut = vue === "terre" ? 1 : 0;
+    const jeux = [];
+    resume.classes.forEach(function (nom, c) {
+      if (c < debut) { return; }
+      const fusion = c === resume.classes.length - 1;
+      jeux.push({ label: nom, data: lignes.map(function (s) { return s.hectares[c]; }),
+                  borderColor: couleurs[c], backgroundColor: couleurs[c], borderWidth: 2,
+                  borderDash: fusion ? [6, 4] : [], pointRadius: 4, tension: 0 });
+    });
+    if (graphique) { graphique.destroy(); }
+    graphique = new Chart(document.getElementById("graphique"), {
+      type: "line", data: { labels: resume.dates, datasets: jeux },
+      options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
+                 plugins: { legend: { labels: { color: texte, usePointStyle: true } } },
+                 scales: axes("Surface (ha)") } });
+  }
+  if (typeof Chart === "undefined") {
+    document.querySelectorAll(".boite-graphique").forEach(function (b) {
+      b.style.height = "auto";
+      b.innerHTML = "<p class='note'>Graphique indisponible sans connexion Internet : les valeurs sont dans les tableaux.</p>";
+    });
+  } else {
+    tracerSurfaces("zone");
+    if (resume.ndvi) {
+      new Chart(document.getElementById("graphique-ndvi"), {
+        type: "line",
+        data: { labels: resume.dates, datasets: [{ label: "NDVI médian (terre ferme)",
+                data: resume.ndvi.medianes, borderColor: "#1c8457", backgroundColor: "#1c8457",
+                borderWidth: 2, pointRadius: 4, tension: 0 }] },
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+                   scales: axes("NDVI") } });
+    }
+  }
+  const legendes = {
+    zone: {{ ("Toute la zone : pixels classés aux " ~ resume.nb_dates ~ " dates, " ~ ha(resume.hectares_communs) ~ " ha") | tojson }},
+    terre: {{ ("Terre ferme : pixels jamais classés en eau, " ~ ha(resume.hectares_terre) ~ " ha") | tojson }}
+  };
+  onglets("choix-surface", "data-vue", function (vue) {
+    document.querySelectorAll("[data-vue-bloc]").forEach(function (d) {
+      d.classList.toggle("d-none", d.getAttribute("data-vue-bloc") !== vue);
+    });
+    document.getElementById("legende-surfaces").textContent = legendes[vue];
+    tracerSurfaces(vue);
+  });
+
+  // --- Carte ---
   const boite = document.getElementById("carte");
-  if (typeof L === "undefined") {
+  const premier = document.querySelector("#choix-carte button");
+  function montrerBilan(nom) {
+    document.querySelectorAll("[data-bilan]").forEach(function (d) {
+      d.classList.toggle("d-none", d.getAttribute("data-bilan") !== nom);
+    });
+  }
+  if (typeof L === "undefined" || !premier) {
     boite.classList.add("carte-indisponible");
     boite.innerHTML = "<p>Carte indisponible : connexion Internet requise pour le fond satellite.</p>";
+    onglets("choix-carte", "data-carte", montrerBilan);
     return;
   }
   const e = resume.emprise_wgs84;
   const bornes = [[e[1], e[0]], [e[3], e[2]]];
   const carte = L.map("carte");
-  L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
     { maxZoom: 17, attribution: "Imagerie © Esri" }).addTo(carte);
-  const couche = L.imageOverlay(
-    {{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='changement.png') | tojson }},
-    bornes, { opacity: 0.9 }).addTo(carte);
+  const couche = L.imageOverlay(urlCarte.replace("__NOM__", premier.getAttribute("data-carte")),
+                                bornes, { opacity: 0.9 }).addTo(carte);
   L.rectangle(bornes, { color: "#ffffff", weight: 1, fill: false, interactive: false }).addTo(carte);
   carte.fitBounds(bornes);
+  onglets("choix-carte", "data-carte", function (nom) {
+    couche.setUrl(urlCarte.replace("__NOM__", nom));
+    montrerBilan(nom);
+  });
   document.getElementById("opacite").addEventListener("input", function () {
     couche.setOpacity(this.value / 100);
   });
