@@ -4,7 +4,7 @@
 {% set ev = evaluation %}
 {% block titre %}Évaluation du modèle{% endblock %}
 {% block entete %}Évaluation du modèle{% endblock %}
-{% block soustitre %}Modèle U-Net · jeu de test 2025-2026 · comparaison avec des masques de référence automatiques.{% endblock %}
+{% block soustitre %}Modèle U-Net · jeu de test 2025-2026 · comparaison avec des masques de référence automatiques · emprise de Bol.{% endblock %}
 {% block contenu %}
 <nav class="onglets-page" id="onglets">
   <button type="button" data-onglet="metriques" class="actif">Métriques</button>
@@ -17,8 +17,8 @@
 <div class="kpi-mini">
   <div><small>IoU moyen</small><b>{{ ev.globales[2].valeur | fr(2) }}</b><small>recouvrement prédiction / référence</small></div>
   <div><small>Dice moyen</small><b>{{ ev.globales[1].valeur | fr(2) }}</b><small>égal au F1 macro (2·VP / (2·VP + FP + FN))</small></div>
-  <div><small>Précision moyenne</small><b class="absent">non mesurée</b><small>absente des sorties enregistrées</small></div>
-  <div><small>Rappel moyen</small><b class="absent">non mesuré</b><small>absent des sorties enregistrées</small></div>
+  <div><small>Précision moyenne</small><b>0,68</b><small>moyenne des 5 classes (mémoire, tableau 4.2)</small></div>
+  <div><small>Rappel moyen</small><b>0,78</b><small>moyenne des 5 classes (mémoire, tableau 4.2)</small></div>
 </div>
 <div style="height:20px"></div>
 {# ================= 1. Le modèle ================= #}
@@ -90,6 +90,26 @@
       changements : c'est une condition pour qu'un changement détecté ait un sens.</p></div>
   </section>
 </div>
+
+{# ================= Contrôle visuel en aveugle ================= #}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Contrôle visuel en aveugle des pertes détectées</h2>
+    <p>80 points tirés au hasard (20 par catégorie) dans la carte de synthèse de février · 69 interprétés sans connaître la catégorie du système</p></header>
+  <div class="corps">
+    <table class="donnees">
+      <thead><tr><th>Catégorie de la carte</th><th class="num">Points interprétés</th><th class="num">Pertes observées</th><th class="num">IC à 95 % (Wilson)</th></tr></thead>
+      <tbody>
+        <tr><td>Perte confirmée</td><td class="num">11</td><td class="num"><b>7 (63,6 %)</b></td><td class="num">35,4 à 84,8 %</td></tr>
+        <tr><td>Perte non confirmée</td><td class="num">18</td><td class="num">1 (5,6 %)</td><td class="num">1,0 à 25,8 %</td></tr>
+        <tr><td>Gain de végétation</td><td class="num">20</td><td class="num">0 (0,0 %)</td><td class="num">0,0 à 16,1 %</td></tr>
+        <tr><td>Stable</td><td class="num">20</td><td class="num">0 (0,0 %)</td><td class="num">0,0 à 16,1 %</td></tr>
+      </tbody>
+    </table>
+    <p class="note">Lecture : environ deux pertes confirmées sur trois sont des pertes visibles sur les images, contre une perte non confirmée sur dix-huit.
+      Les intervalles ne se chevauchent pas : la confirmation par le NDVI apporte une information réelle. Contrôle réalisé par une seule interprète
+      sur des images Sentinel-2 à 10 m, sans vérité de terrain ; avec 11 points, la précision des pertes confirmées reste imprécise.</p>
+  </div>
+</section>
 
 {# ================= 5. Limites ================= #}
 <section class="panneau" style="margin-top:20px">

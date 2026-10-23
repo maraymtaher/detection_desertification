@@ -83,6 +83,8 @@
   <a class="btn btn-principal" href="{{ url_for('zones.detail', suivi_id=suivi['id']) }}">{{ ico("alerte") }} Voir les zones à surveiller</a>
 </section>
 
+<p class="note" style="margin-top:12px">« Perte confirmée » : passage de la végétation à la surface nue détecté par le U-Net, accompagné d'une baisse du NDVI supérieure à 0,10, en taches d'au moins 0,5 ha. C'est un critère de cohérence entre deux mesures, et non une vérification de terrain ; lors du contrôle en aveugle, 63,6 % des pertes confirmées étaient visibles sur les images.</p>
+
 {% if v %}
 <div class="message {{ 'success' if v.statut == 'valide' else 'warning' }}" style="margin-top:14px">
   {% if v.statut == 'valide' %}<b>Résultat validé :</b> toute la zone est dans la zone d'entraînement du modèle (Bol, lac Tchad).

@@ -70,9 +70,10 @@
   },
   "limites": [
     "Les scores mesurent l'accord avec des masques automatiques, pas avec le terrain.",
-    "Entraînement, validation et test portent sur la même emprise : la capacité à généraliser à d'autres régions n'est pas mesurée.",
+    "Entraînement, validation et test portent sur la même emprise (Bol). Sur une zone voisine jamais vue, l'accord avec Dynamic World passe d'un Kappa de 0,829 à 0,490 : la précision ailleurs autour du lac reste à évaluer.",
     "Le NDVI est à la fois une entrée du modèle et un élément de construction des masques.",
-    "Les classes « sol nu » et « sable/dune » sont souvent confondues ; elles sont additionnées (« terres nues ») dans le suivi temporel."
+    "Les classes « sol nu » et « sable/dune » sont souvent confondues ; elles sont additionnées (« terres nues ») dans le suivi temporel.",
+    "Une « perte confirmée » associe une transition du U-Net et une baisse du NDVI : c'est un critère de cohérence, pas une vérification de terrain (63,6 % de pertes visibles lors du contrôle en aveugle, sur 11 points)."
   ],
   "comparaison_modeles": {
     "source": "Notebook « améliorations v5 » : mêmes images de test 2025-2026, mêmes masques de référence ; un seul entraînement par modèle (écarts de moins d'un point non significatifs)",
