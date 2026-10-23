@@ -1,0 +1,22 @@
+{% extends "base_public.html" %}
+{% block titre %}Mot de passe oublié{% endblock %}
+{% block titre_volet %}Mot de passe oublié ?<br><small>Récupérez l'accès à votre compte</small>{% endblock %}
+{% block liste_volet %}{% endblock %}
+{% block contenu %}
+<div class="icone-ronde">{{ ico("courriel") }}</div>
+<h2 style="text-align:center">Réinitialisation de votre mot de passe</h2>
+{% if envoye %}
+<div class="message warning">Cette installation fonctionne sur votre ordinateur, sans serveur d'envoi d'e-mails :
+  aucun lien ne peut être envoyé. L'administrateur peut définir un nouveau mot de passe avec la commande :</div>
+<pre class="commande">python reinitialiser_mot_de_passe.py {{ email }}</pre>
+{% else %}
+<p class="intro" style="text-align:center">Entrez votre adresse e-mail pour réinitialiser votre mot de passe.</p>
+<form method="post">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <div class="champ"><label for="email">Adresse e-mail</label>
+    <div class="champ-icone">{{ ico("courriel") }}<input type="email" id="email" name="email" placeholder="exemple@domaine.com" required autofocus></div></div>
+  <button class="btn btn-principal btn-large">Continuer {{ ico("fleche") }}</button>
+</form>
+{% endif %}
+<p class="bascule" style="text-align:center"><a href="{{ url_for('auth.connexion') }}">← Retour à la connexion</a></p>
+{% endblock %}

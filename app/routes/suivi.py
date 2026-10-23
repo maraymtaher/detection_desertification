@@ -6,6 +6,7 @@ from flask import (Blueprint, abort, flash, g, jsonify, redirect,
                    render_template, request, send_from_directory, url_for)
 
 from app import geometrie, taches
+from app.indicateurs import VERSION_METHODE, reponse_suivi
 from app.modeles_bd import bd
 from app.routes.auth import connexion_requise
 
@@ -97,7 +98,8 @@ def detail(suivi_id):
     suivi = suivi_ou_404(suivi_id)
     resume = json.loads(suivi["resume"]) if suivi["resume"] else None
     return render_template(
-        "suivi.html", suivi=suivi, resume=resume,
+        "suivi.html", suivi=suivi, resume=resume, version_methode=VERSION_METHODE,
+        reponse=reponse_suivi(resume) if resume else None,
         surface=geometrie.surface_km2(*[float(v) for v in suivi["zone"].split(",")]))
 
 
@@ -128,6 +130,8 @@ def relancer(suivi_id):
         return redirect(url_for("suivi.detail", suivi_id=suivi_id))
     if suivi["dossier"]:
         shutil.rmtree(suivi["dossier"], ignore_errors=True)
+    bd().execute("DELETE FROM zones WHERE suivi_id = ?", (suivi_id,))
+    bd().execute("DELETE FROM avis WHERE suivi_id = ?", (suivi_id,))
     bd().execute("UPDATE suivi SET statut = 'en_attente', progression = 0, message = '', "
                  "resume = '' WHERE id = ?", (suivi_id,))
     bd().commit()
@@ -144,6 +148,8 @@ def supprimer(suivi_id):
         return redirect(url_for("suivi.detail", suivi_id=suivi_id))
     if suivi["dossier"]:
         shutil.rmtree(suivi["dossier"], ignore_errors=True)
+    bd().execute("DELETE FROM zones WHERE suivi_id = ?", (suivi_id,))
+    bd().execute("DELETE FROM avis WHERE suivi_id = ?", (suivi_id,))
     bd().execute("DELETE FROM suivi WHERE id = ?", (suivi_id,))
     bd().commit()
     flash("Suivi supprimé.", "success")

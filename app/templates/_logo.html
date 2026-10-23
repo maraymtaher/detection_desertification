@@ -1,0 +1,8 @@
+{# Logo du système : feuille dans un cercle, nom en deux couleurs, devise #}
+{% from "_icones.html" import ico %}
+{% macro logo(clair=True) %}
+<span class="logo-dd {{ 'clair' if clair }}">
+  <span class="pastille-logo">{{ ico("feuille") }}</span>
+  <span><b>{{ nom_systeme[:4] }}<em>{{ nom_systeme[4:] }}</em></b><small>Observer · Analyser · Agir</small></span>
+</span>
+{% endmacro %}

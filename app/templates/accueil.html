@@ -1,11 +1,101 @@
-{% extends "base_public.html" %}
-{% block titre %}Accueil{% endblock %}
-{% block contenu %}
-<h2>Accès à la plateforme</h2>
-<p class="intro">Importez un produit Sentinel-2 de niveau L2A : le système le vérifie,
-  le prétraite et produit une carte d'occupation du sol. La comparaison de deux dates
-  de la même saison fait apparaître les changements.</p>
-<a class="btn btn-principal btn-large" href="{{ url_for('auth.connexion') }}">Se connecter {{ ico("fleche") }}</a>
-<a class="btn btn-secondaire btn-large" style="margin-top:10px"
-   href="{{ url_for('auth.inscription') }}">Créer un compte</a>
-{% endblock %}
+{% from "_icones.html" import ico %}
+{% from "_logo.html" import logo %}
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ nom_systeme }} · Détection automatique de la désertification</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body class="page-vitrine">
+<header class="hero-vitrine" style="background-image:url('{{ url_for('static', filename='img/fond_accueil.jpg') }}')">
+  <div class="voile-hero"></div>
+  <nav class="nav-vitrine">
+    <a href="{{ url_for('main.accueil') }}">{{ logo() }}</a>
+    <input type="checkbox" id="menu-mobile" class="d-none">
+    <label for="menu-mobile" class="bouton-menu" aria-label="Menu">{{ ico("menu") }}</label>
+    <div class="liens-vitrine">
+      <a href="#accueil" class="actif">Accueil</a>
+      <a href="#fonctionnalites">Fonctionnalités</a>
+      <a href="#donnees">Données</a>
+      <a href="#documentation">Documentation</a>
+      <a href="#a-propos">À propos</a>
+      <span class="langue">{{ ico("globe") }} FR</span>
+      <a class="btn btn-principal" href="{{ url_for('auth.connexion') }}">Connexion</a>
+    </div>
+  </nav>
+  <div class="contenu-hero" id="accueil">
+    <div class="texte-hero">
+      <h1 class="nom-hero">{{ nom_systeme[:4] }}<em>{{ nom_systeme[4:] }}</em></h1>
+      <h2>Détection automatique de la désertification<br>à partir d'images Sentinel-2 par apprentissage profond</h2>
+      <p class="intro-hero">DeepDesert classe chaque image avec un U-Net, compare plusieurs années d'une même saison et ne retient comme indicateur de désertification que les pertes de végétation persistantes, confirmées par la baisse du NDVI.</p>
+      <div class="boutons-hero">
+        <a class="btn btn-principal btn-hero" href="{{ url_for('auth.inscription') }}">Commencer maintenant {{ ico("fleche") }}</a>
+        <a class="btn btn-contour" href="#fonctionnalites">En savoir plus</a>
+      </div>
+      <p class="lieu-hero">{{ ico("repere") }} Emprise de validation du modèle : Bol (Mamdi), province du Lac, Tchad</p>
+    </div>
+    <figure class="carte-hero">
+      <div id="mini-carte" class="mini-carte"></div>
+      <figcaption>Cadre orange : emprise d'entraînement et de validation du modèle (Bol, 14,40–15,05° E ; 13,10–13,80° N)</figcaption>
+    </figure>
+  </div>
+</header>
+
+<main class="sections-vitrine">
+  <section id="fonctionnalites">
+    <h2>Fonctionnalités</h2>
+    <div class="cartes-vitrine">
+      <article>{{ ico("satellite") }}<h3>Gestion des données Sentinel-2</h3><p>Import des archives L2A, vérification des bandes, mesure de la couverture nuageuse.</p></article>
+      <article>{{ ico("filtre") }}<h3>Prétraitement</h3><p>Masque des nuages, rééchantillonnage à 10 m, indices NDVI, NDWI, BSI et NDRE.</p></article>
+      <article>{{ ico("reseau") }}<h3>Segmentation U-Net</h3><p>Eau, végétation dense, végétation clairsemée, sol nu, sable et dunes, pixel par pixel.</p></article>
+      <article>{{ ico("courbe") }}<h3>Analyse temporelle</h3><p>Comparaison des années, test de Mann-Kendall, synthèse selon l'indicateur ODD 15.3.1.</p></article>
+      <article>{{ ico("cible") }}<h3>Détection et zones à surveiller</h3><p>Localisation des terres dégradées et vérification sur les images avant / après.</p></article>
+      <article>{{ ico("rapport") }}<h3>Rapports et exports</h3><p>PDF avec traçabilité, GeoTIFF, CSV, GeoJSON et KML.</p></article>
+    </div>
+  </section>
+  <section id="donnees">
+    <h2>Données</h2>
+    <div class="faits-vitrine">
+      <div><b>Sentinel-2 L2A</b><span>Réflectance de surface, ESA Copernicus</span></div>
+      <div><b>10 m</b><span>Résolution au sol</span></div>
+      <div><b>{{ tuiles_modele | join(" · ") }}</b><span>Tuiles de la zone d'étude</span></div>
+      <div><b>14 canaux</b><span>10 bandes et 4 indices</span></div>
+    </div>
+  </section>
+  <section id="documentation">
+    <h2>Documentation</h2>
+    <ol class="etapes-vitrine">
+      <li><b>Importer</b> une image Sentinel-2 L2A (archive .zip du Copernicus Browser).</li>
+      <li><b>Segmenter</b> la zone avec le U-Net : carte des 5 classes et surfaces.</li>
+      <li><b>Comparer</b> plusieurs années de la même saison dans une détection.</li>
+      <li><b>Vérifier</b> les zones signalées sur les images, puis <b>exporter</b> le rapport.</li>
+    </ol>
+  </section>
+  <section id="a-propos">
+    <h2>À propos</h2>
+    <p>{{ nom_systeme }} est réalisé dans le cadre d'un projet de fin d'études en informatique (ENASTIC, N'Djaména).
+      Le modèle est entraîné et validé sur l'emprise du département de Mamdi, autour de Bol ; en dehors de cette zone,
+      ses résultats ne sont pas garantis.</p>
+  </section>
+</main>
+<footer class="pied-vitrine">{{ logo() }}<span>Des données satellitaires pour une meilleure gestion des terres.</span></footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function () {
+  if (typeof L === "undefined") { return; }
+  const v = {{ emprise_modele | tojson }};
+  const fixe = { zoomControl: false, attributionControl: false, dragging: false, scrollWheelZoom: false,
+                 doubleClickZoom: false, boxZoom: false, keyboard: false, touchZoom: false };
+  const esri = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
+  const mini = L.map("mini-carte", fixe);
+  L.tileLayer(esri, { maxZoom: 17 }).addTo(mini);
+  L.rectangle([[v[1], v[0]], [v[3], v[2]]], { color: "#f0a63a", weight: 2, fillOpacity: 0.08 }).addTo(mini);
+  mini.fitBounds([[v[1], v[0]], [v[3], v[2]]], { padding: [8, 8] });
+})();
+</script>
+</body>
+</html>

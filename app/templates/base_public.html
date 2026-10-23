@@ -1,56 +1,50 @@
-{% from "_icones.html" import ico, choix_theme %}
+{% from "_icones.html" import ico %}
+{% from "_logo.html" import logo %}
 <!doctype html>
 <html lang="fr">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block titre %}Accès{% endblock %} · {{ nom_systeme }}</title>
-  <script src="{{ url_for('static', filename='js/theme.js') }}"></script>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
-<body>
-<div class="public">
-  {# Colonne de gauche : trois bandes superposées, sans texte posé sur la carte #}
-  <section class="vitrine">
-    <header class="vitrine-titre">
-      <div class="surtitre">Lac Tchad · Département de Bol</div>
-      <h1>Suivi de la désertification par imagerie satellite et intelligence artificielle</h1>
-    </header>
-    <div class="vitrine-carte">
-      <div id="carte" class="carte"></div>
-      <div class="etiquette-carte"><i class="trait"></i>Zone de validité du modèle</div>
+<body class="page-auth">
+<main class="ecran-auth">
+  <aside class="volet-auth">
+    <a href="{{ url_for('main.accueil') }}">{{ logo() }}</a>
+    <div class="bande-satellite" style="background-image:url('{{ url_for('static', filename='img/fond_volet.jpg') }}')"></div>
+    <div class="texte-volet">
+      <p class="titre-volet">{% block titre_volet %}Une meilleure connaissance<br>du territoire pour un avenir durable.{% endblock %}</p>
+      {% block liste_volet %}
+      <ul class="liste-volet">
+        <li>{{ ico("satellite") }} Données Sentinel-2</li>
+        <li>{{ ico("reseau") }} Intelligence artificielle</li>
+        <li>{{ ico("carte") }} Cartes interactives</li>
+        <li>{{ ico("rapport") }} Rapports et export</li>
+      </ul>
+      {% endblock %}
     </div>
-    <footer class="vitrine-faits">
-      <div><b>10 m</b><span>Résolution au sol</span></div>
-      <div><b>5</b><span>Classes d'occupation du sol</span></div>
-      <div><b>2017–2026</b><span>Données d'entraînement</span></div>
-      <div><b>U-Net</b><span>Modèle de segmentation</span></div>
-    </footer>
-  </section>
-
-  {# Colonne de droite : en-tête, formulaire centré, note en bas #}
-  <section class="acces">
-    <div class="acces-entete">
-      <a class="marque" href="{{ url_for('main.accueil') }}">
-        <span class="sigle">{{ ico("globe") }}</span>
-        <span><b>{{ nom_systeme }}</b><small>{{ sous_titre }}</small></span>
-      </a>
-      {{ choix_theme() }}
-    </div>
-    <div class="acces-corps">
+  </aside>
+  <section class="formulaire-auth">
+    <div class="contenu-auth">
       {% for categorie, message in get_flashed_messages(with_categories=true) %}
         <div class="message {{ categorie }}">{{ message }}</div>
       {% endfor %}
       {% block contenu %}{% endblock %}
     </div>
-    <p class="acces-note">Le modèle est validé uniquement sur la zone encadrée en orange
-      (tuiles {{ tuiles_modele | join(" et ") }}). En dehors, les résultats ne sont pas fiables.</p>
   </section>
-</div>
+</main>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="{{ url_for('static', filename='js/carte_zone.js') }}"></script>
-<script>carteZone("carte", {{ emprise_modele | tojson }},
-  { interactive: false, marge: 1.1, tuiles: [] });</script>
+<script>
+// Afficher / masquer le mot de passe
+document.querySelectorAll("[data-oeil]").forEach(function (b) {
+  b.addEventListener("click", function () {
+    const champ = document.getElementById(b.getAttribute("data-oeil"));
+    champ.type = champ.type === "password" ? "text" : "password";
+  });
+});
+</script>
+{% block scripts %}{% endblock %}
 </body>
 </html>

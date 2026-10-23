@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Zones à surveiller{% endblock %}
+{% block entete %}Zones à surveiller{% endblock %}
+{% block soustitre %}Foyers de dégradation identifiés à partir d'un suivi temporel, à vérifier un par un.{% endblock %}
+{% block contenu %}
+<section class="panneau">
+  {% if suivis %}
+  <table class="donnees">
+    <thead><tr><th>Suivi</th><th>Tuile</th><th>Dates</th><th>Zones à surveiller</th><th></th></tr></thead>
+    <tbody>
+    {% for s in suivis %}
+      <tr><td class="mono">n° {{ s['id'] }}</td><td class="mono">{{ s['tuile'] }}</td>
+        <td>{{ s['analyses'].split(',') | length }}</td>
+        <td>{% if s['statut_zones'] %}{{ statut(s['statut_zones']) }}{% else %}<span class="puce neutre"><i></i>Non calculées</span>{% endif %}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire" style="padding:5px 13px"
+          href="{{ url_for('zones.detail', suivi_id=s['id']) }}">Ouvrir</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucun suivi terminé. Calculez d'abord un suivi temporel.</div>
+  {% endif %}
+</section>
+{% endblock %}

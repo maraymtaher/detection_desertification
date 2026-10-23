@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Données Sentinel-2{% endblock %}
+{% block entete %}Images Sentinel-2{% endblock %}
+{% block soustitre %}Gérez vos images, parcourez les dates et consultez les métadonnées.{% endblock %}
+{% block actions %}
+<a class="btn btn-principal" href="{{ url_for('analyses.importer') }}">{{ ico("import") }} Importer des données</a>
+{% endblock %}
+{% block contenu %}
+<section class="panneau">
+  <div class="corps">
+    <form class="selecteurs" method="get" style="margin-bottom:0">
+      <label style="flex:1; min-width:240px">Rechercher
+        <input type="text" name="q" value="{{ filtres.q }}" placeholder="Rechercher une image, une date…"></label>
+      <label>Zone d'étude (tuile)<select name="tuile" onchange="this.form.submit()"><option value="">Toutes</option>
+        {% for t in tuiles %}<option {{ 'selected' if filtres.tuile == t }}>{{ t }}</option>{% endfor %}</select></label>
+      <label>Année<select name="annee" onchange="this.form.submit()"><option value="">Toutes</option>
+        {% for a in annees %}<option {{ 'selected' if filtres.annee == a }}>{{ a }}</option>{% endfor %}</select></label>
+      <label>Mois<select name="mois" onchange="this.form.submit()"><option value="">Tous</option>
+        {% for v, m in mois %}<option value="{{ v }}" {{ 'selected' if filtres.mois == v }}>{{ m }}</option>{% endfor %}</select></label>
+      <label>Statut<select name="etat" onchange="this.form.submit()"><option value="">Tous</option>
+        {% for k, v in etats.items() %}<option value="{{ k }}" {{ 'selected' if filtres.etat == k }}>{{ v }}</option>{% endfor %}</select></label>
+    </form>
+  </div>
+  {% if lignes %}
+  <div class="defile">
+  <table class="donnees">
+    <thead><tr><th>Date</th><th>Produit</th><th>Couverture nuageuse</th><th class="secondaire">Bandes</th><th>Statut</th><th style="text-align:right">Actions</th></tr></thead>
+    <tbody>
+    {% for l in lignes %}{% set p = l.p %}
+      <tr>
+        <td><b>{{ p['date_acquisition'] }}</b><br><small style="color:var(--attenue)">{{ p['tuile'] }}</small></td>
+        <td class="mono" title="{{ p['nom'] }}">{{ p['nom'].split('_')[:3] | join('_') }}</td>
+        <td class="cellule-nuages" data-produit="{{ p['id'] }}" data-url="{{ url_for('images.controle_json', produit_id=p['id']) }}">
+          {% if l.controle and l.controle.part_nuages is not none %}<span class="mono">{{ l.controle.part_nuages | fr(1) }} %</span>
+          {% else %}<span class="a-mesurer" style="color:var(--attenue)">mesure…</span>{% endif %}</td>
+        <td class="secondaire mono" style="font-size:11.5px">{{ bandes }} + SCL</td>
+        <td>{% if l.etat == 'analysee' %}<span class="puce ok"><i></i>Analysée</span>
+          {% elif l.etat == 'avertissement' %}<span class="puce alerte"><i></i>Hors zone</span>
+          {% else %}<span class="puce info"><i></i>Disponible</span>{% endif %}</td>
+        <td style="text-align:right; white-space:nowrap">
+          <a class="btn btn-secondaire petit" title="Prétraitement et métadonnées" href="{{ url_for('vues.pretraitement', produit=p['id']) }}">{{ ico("oeil") }}</a>
+          <a class="btn btn-secondaire petit" title="Segmentation U-Net" href="{{ url_for('vues.segmentation', produit=p['id']) }}">{{ ico("reseau") }}</a>
+          {% if not l.nb_analyses %}
+          <form method="post" action="{{ url_for('analyses.supprimer', produit_id=p['id']) }}" style="display:inline"
+                onsubmit="return confirm('Supprimer cette image et son archive ?');">
+            <input type="hidden" name="jeton" value="{{ jeton() }}">
+            <button class="btn btn-secondaire petit" title="Supprimer">{{ ico("corbeille") }}</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="corps pagination">
+    <span>{% for n in range(1, nb_pages + 1) %}
+      <a class="{{ 'actif' if n == page }}" href="{{ url_for('images.liste', page=n, **filtres) }}">{{ n }}</a>{% endfor %}</span>
+    <span style="color:var(--attenue)">{{ nb_lignes }} élément(s) · {{ comptes.analysee }} analysée(s) sur {{ total }}</span>
+  </div>
+  {% else %}
+  <div class="vide">Aucune image ne correspond.{% if not total %} <a href="{{ url_for('analyses.importer') }}">Importer une archive Sentinel-2 L2A</a>.{% endif %}</div>
+  {% endif %}
+</section>
+<p class="note" style="margin-top:12px">Couverture nuageuse : part des pixels marqués nuage, ombre de nuage ou cirrus par la couche SCL de l'ESA,
+  sur la tuile entière (échantillon réduit). Elle est mesurée une fois, puis conservée.</p>
+{% endblock %}
+{% block scripts %}
+<script>
+// Mesure de la couverture nuageuse des images qui ne l'ont pas encore, une par une
+(function () {
+  const cellules = Array.from(document.querySelectorAll(".cellule-nuages")).filter(function (c) { return c.querySelector(".a-mesurer"); });
+  function suivante() {
+    const c = cellules.shift();
+    if (!c) { return; }
+    fetch(c.getAttribute("data-url"), { credentials: "same-origin" }).then(function (r) { return r.json(); }).then(function (d) {
+      c.innerHTML = d.ok && d.nuages !== null ? "<span class='mono'>" + d.nuages.toFixed(1).replace(".", ",") + " %</span>"
+                                               : "<span title='" + (d.message || "") + "'>—</span>";
+      suivante();
+    }).catch(function () { c.textContent = "—"; suivante(); });
+  }
+  suivante();
+})();
+</script>
+{% endblock %}

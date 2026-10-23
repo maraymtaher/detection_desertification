@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% macro km(ha) %}{% set v = ha / 100 %}{% if v | abs < 0.05 %}0,0{% else %}{{ v | fr(1 if v | abs < 100 else 0) }}{% endif %} km²{% endmacro %}
+{% macro valp(p) %}{% if p is none %}—{% elif p < 0.001 %}&lt; 0,001{% else %}{{ p | fr(3) }}{% endif %}{% endmacro %}
+{% block titre %}Détection n° {{ d['id'] }}{% endblock %}
+{% block entete %}Détection n° {{ d['id'] }}{% endblock %}
+{% block soustitre %}{{ mois | capitalize }} {{ d['annee_debut'] }} → {{ d['annee_fin'] }} · {{ images | length }} images ·
+  zone de {{ surface | fr(0) }} km²{% endblock %}
+{% block actions %}
+{{ statut(d['statut']) }}
+{% if d['statut'] == 'terminee' and suivi %}
+<a class="btn btn-principal" style="padding:6px 13px" href="{{ url_for('rapports.pdf_suivi', suivi_id=suivi['id']) }}">{{ ico("rapport") }} Rapport PDF</a>
+{% endif %}
+<a class="btn btn-secondaire" style="padding:6px 13px" href="{{ url_for('detection.page') }}">Nouvelle détection</a>
+{% endblock %}
+{% block contenu %}
+
+{% if d['statut'] in ('en_attente', 'en_cours') %}
+{% set p = d['progression'] %}
+<section class="panneau">
+  <header><h2>Détection en cours</h2><p>Cette page se met à jour toute seule ; vous pouvez la quitter et revenir.</p></header>
+  <div class="corps">
+    <div class="chaine suivi">
+      <div class="{{ 'faite' if p >= 70 else 'courante' }}"><b>1. Segmentation U-Net</b>{{ images | length }} images, une par année</div>
+      <div class="{{ 'faite' if p >= 90 else ('courante' if p >= 70) }}"><b>2. Comparaison des années</b>Changement d'état + contrôle NDVI</div>
+      <div class="{{ 'courante' if p >= 90 }}"><b>3. Zones à surveiller</b>Foyers de perte et images avant / après</div>
+    </div>
+    <div class="jauge" style="margin-top:22px"><i id="barre" style="width:{{ p }}%"></i></div>
+    <div class="suivi-ligne"><span id="message">{{ d['message'] or "En file d'attente…" }}</span><b id="part">{{ p }} %</b></div>
+    <p class="note">Images retenues : {% for i in images %}<span class="mono">{{ i['date_acquisition'] }}</span>{{ ", " if not loop.last }}{% endfor %}.
+      La durée dépend du nombre d'images à analyser : celles déjà analysées sur cette zone sont réutilisées.</p>
+  </div>
+</section>
+
+{% elif d['statut'] == 'echouee' %}
+<div class="message danger">{{ d['message'] }}</div>
+<form method="post" action="{{ url_for('detection.lancer') }}">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <input type="hidden" name="zone" value="{{ d['zone'] }}"><input type="hidden" name="mois" value="{{ d['mois'] }}">
+  <input type="hidden" name="annee_debut" value="{{ d['annee_debut'] }}"><input type="hidden" name="annee_fin" value="{{ d['annee_fin'] }}">
+  <button class="btn btn-principal">{{ ico("historique") }} Relancer la détection</button>
+</form>
+
+{% elif suivi and resume and resume.get('version') != version_methode %}
+<div class="message warning">Cette détection a été calculée avec une ancienne méthode. Ouvrez le suivi et cliquez sur
+  « Recalculer », puis recalculez les zones à surveiller.</div>
+<a class="btn btn-principal" href="{{ url_for('suivi.detail', suivi_id=suivi['id']) }}">Ouvrir le suivi</a>
+
+{% elif suivi and reponse %}
+{% set s = resume.bilans.synthese.categories %}
+{% set v = resume.validite %}
+{% for a in resume.avertissements %}<div class="message warning">{{ a }}</div>{% endfor %}
+
+<section class="reponse {{ reponse.ton }}">
+  <p class="question">Y a-t-il une dégradation des terres dans cette zone entre {{ d['annee_debut'] }} et {{ d['annee_fin'] }} ?</p>
+  <h2>{{ reponse.titre }}</h2>
+  <p>Sur {{ km(reponse.zone_ha) }} analysés, <b>{{ km(reponse.confirmee_ha) }} de pertes de végétation confirmées</b>
+    ({{ reponse.part_degradation | fr(2) }} %) et <b>{{ km(reponse.amelioration_ha) }} de gains de végétation</b>
+    ({{ reponse.part_amelioration | fr(1) }} %).
+    Terres nues hors du lac : {% if reponse.nues_sens == 'hausse' %}hausse significative{% elif reponse.nues_sens == 'baisse' %}baisse significative{% else %}pas de tendance nette{% endif %} (p {{ valp(reponse.nues_p) }}).
+    {% if reponse.ndvi_debut is not none %}Le NDVI médian passe de {{ reponse.ndvi_debut | fr(3) }} à {{ reponse.ndvi_fin | fr(3) }}
+    ({% if reponse.ndvi_sens == 'hausse' %}hausse significative{% elif reponse.ndvi_sens == 'baisse' %}baisse significative{% else %}pas de tendance nette{% endif %}, p {{ valp(reponse.ndvi_p) }}).{% endif %}</p>
+</section>
+
+{% if v %}
+<div class="message {{ 'success' if v.statut == 'valide' else 'warning' }}" style="margin-top:14px">
+  {% if v.statut == 'valide' %}<b>Résultat validé :</b> toute la zone est dans la zone d'entraînement du modèle (rectangle orange).
+  {% elif v.statut == 'partiel' %}<b>Résultat partiellement validé :</b> {{ v.part_zone | fr(1) }} % de la zone est dans la zone
+    d'entraînement du modèle (rectangle orange) ; le reste est <b>indicatif</b>.
+  {% else %}<b>Résultat indicatif :</b> la zone est hors de la zone d'entraînement du modèle (rectangle orange) ; il n'y a pas été validé.{% endif %}
+</div>
+{% endif %}
+
+<div class="kpis" style="margin-top:20px">
+  <div class="kpi"><span class="rond rouge">{{ ico("alerte") }}</span><div>
+    <div class="kpi-titre">Perte confirmée</div><div class="kpi-valeur">{{ km(reponse.confirmee_ha) }}</div>
+    <div class="kpi-detail">U-Net + baisse du NDVI &gt; 0,10, taches ≥ 0,5 ha</div></div></div>
+  <div class="kpi"><span class="rond">{{ ico("coche") }}</span><div>
+    <div class="kpi-titre">Perte non confirmée</div><div class="kpi-valeur">{{ km(reponse.non_confirmee_ha) }}</div>
+    <div class="kpi-detail">U-Net seul : à vérifier</div></div></div>
+  <div class="kpi"><span class="rond">{{ ico("fleche") }}</span><div>
+    <div class="kpi-titre">Gain de végétation</div><div class="kpi-valeur">{{ km(reponse.amelioration_ha) }}</div>
+    <div class="kpi-detail">taches ≥ 0,5 ha · {{ reponse.part_amelioration | fr(1) }} % de la zone</div></div></div>
+  <div class="kpi"><span class="rond sable">{{ ico("alerte") }}</span><div>
+    <div class="kpi-titre">Zones à surveiller</div><div class="kpi-valeur">{{ zones.total if zones else '—' }}</div>
+    <div class="kpi-detail">{% if zones %}{{ zones.verifies }} vérifiée(s) sur image{% else %}non calculées{% endif %}</div></div></div>
+</div>
+
+<div class="grille-detection resultat">
+  <section class="panneau">
+    <header class="avec-reglage"><div><h2>Carte des changements détectés</h2>
+      <p>Toute la zone · fond : image du {{ resume.dates[-1] }}</p></div>
+      <label class="reglage">Opacité <input type="range" id="opacite" min="0" max="100" value="90"></label></header>
+    <div class="corps">
+      <div class="barre-carte">
+        <label><input type="checkbox" id="voir-degradation" checked> Pertes / gains</label>
+        <label><input type="checkbox" id="voir-zones" checked> Zones à surveiller</label>
+        <label><input type="checkbox" id="voir-rvb" checked> Image en couleurs réelles</label>
+      </div>
+      <div id="carte" class="carte tres-haute"></div>
+      <div class="legende">
+        {% for c in s if c.code != 0 %}<span><i class="pastille" style="background:{{ c.couleur }}"></i>{{ {4: 'Perte confirmée (U-Net + NDVI)', 1: 'Perte non confirmée', 2: 'Gain ≥ 0,5 ha', 3: 'Changement lié au lac', 5: 'Petit gain'}[c.code] }} · {{ km(c.hectares) }}</span>{% endfor %}
+        <span><i class="trait" style="border-color:#e0403a"></i>Zone à surveiller (1 km)</span>
+        <span><i class="trait" style="border-color:#f0a63a"></i>Zone d'entraînement du modèle</span>
+      </div>
+    </div>
+  </section>
+
+  <aside class="panneau">
+    <header class="avec-reglage"><div><h2>Zones à surveiller</h2><p>Carrés de 1 km avec le plus de pertes, à vérifier sur image</p></div></header>
+    {% if zones %}
+    <div class="liste-zones">
+      {% for f in zones.resultat.foyers %}{% set a = zones.avis.get(f.numero) %}
+      <a class="ligne-zone" href="{{ url_for('zones.fiche', suivi_id=suivi['id'], numero=f.numero) }}" data-numero="{{ f.numero }}">
+        <span class="numero-zone">{{ f.numero }}</span>
+        <span class="texte-zone"><b>{{ f.hectares_confirmes | fr(1) }} ha confirmés</b>
+          <small>{{ f.transition.de }} → {{ f.transition.vers }}{% if f.dans_validite is defined and not f.dans_validite %} · indicatif{% endif %}</small></span>
+        {% if a and a['avis'] == 'visible' %}<span class="puce erreur"><i></i>Visible</span>
+        {% elif a and a['avis'] == 'non_visible' %}<span class="puce ok"><i></i>Non confirmée</span>
+        {% elif a %}<span class="puce neutre"><i></i>Incertain</span>
+        {% else %}<span class="puce alerte"><i></i>À vérifier</span>{% endif %}
+      </a>
+      {% endfor %}
+    </div>
+    <div class="corps"><p class="note">Une zone signalée est un changement cohérent entre les images, pas une
+      désertification prouvée : cliquez pour la vérifier sur les images avant / après.</p>
+      <a class="btn btn-secondaire petit" href="{{ url_for('zones.fichier', suivi_id=suivi['id'], nom='foyers.kml') }}">KML (Google Earth)</a>
+      <a class="btn btn-secondaire petit" href="{{ url_for('zones.fichier', suivi_id=suivi['id'], nom='foyers.geojson') }}">GeoJSON</a></div>
+    {% else %}
+    <div class="vide">Zones non calculées.</div>
+    {% endif %}
+  </aside>
+</div>
+
+<div class="grille-centre">
+  <section class="panneau">
+    <header><h2>Évolution des surfaces (hors du lac)</h2><p>Une valeur par image · km²</p></header>
+    <div class="corps">{{ graphe_surfaces }}
+      <div class="legende">{% for nom, couleur in legende_surfaces %}<span><i class="pastille" style="background:{{ couleur }}"></i>{{ nom }}</span>{% endfor %}</div>
+      <table class="donnees" style="margin-top:12px">
+        <thead><tr><th>Classe</th><th>Tendance</th><th class="num">p</th></tr></thead>
+        <tbody>{% for t in resume.tendances_terre if t %}
+          <tr><td>{{ t.classe }}</td><td>{{ t.sens }}</td><td class="num">{{ valp(t.p) }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+  </section>
+  <section class="panneau">
+    <header><h2>Végétation (NDVI)</h2><p>Médiane hors du lac, mesurée directement sur les images</p></header>
+    <div class="corps">{% if graphe_ndvi %}{{ graphe_ndvi }}{% else %}<div class="vide">NDVI indisponible.</div>{% endif %}
+      <p class="note">Méthode : règle du mémoire (état dominant 2 images sur 3, perte végétation → surface nue confirmée
+        par une baisse du NDVI &gt; 0,10, taches ≥ 0,5 ha) ; tendances : Mann-Kendall au seuil
+        {{ resume.niveau_signification | fr(2) }} et pente de Sen.</p>
+      <div class="actions-image">
+        <a class="btn btn-secondaire petit" href="{{ url_for('suivi.detail', suivi_id=suivi['id']) }}">Détail du suivi</a>
+        <a class="btn btn-secondaire petit" href="{{ url_for('statistiques.page', suivi=suivi['id']) }}">Statistiques complètes</a>
+        <a class="btn btn-secondaire petit" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='synthese.tif') }}">Carte (GeoTIFF)</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<p class="note" style="margin-top:14px">Images utilisées : {% for i in images %}<span class="mono">{{ i['date_acquisition'] }}</span>{{ ", " if not loop.last }}{% endfor %}.</p>
+<form method="post" action="{{ url_for('detection.supprimer', detection_id=d['id']) }}" style="margin-top:10px"
+      onsubmit="return confirm('Retirer cette détection de la liste ? Les analyses et le suivi sont conservés.');">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <button class="btn btn-danger petit">{{ ico("corbeille") }} Retirer de la liste</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if d['statut'] in ('en_attente', 'en_cours') %}
+<script src="{{ url_for('static', filename='js/suivi.js') }}"></script>
+<script>suivreAnalyse({{ url_for('detection.etat', detection_id=d['id']) | tojson }});</script>
+{% elif suivi and reponse and resume.get('version') == version_methode %}
+<script src="{{ url_for('static', filename='js/carte_detection.js') }}"></script>
+<script>
+activerCarteDetection({
+  emprise: {{ resume.emprise_wgs84 | tojson }},
+  validite: {{ emprise_modele | tojson }},
+  synthese: {{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='synthese.png') | tojson }},
+  rvb: {% if derniere_analyse %}{{ url_for('analyses.fichier', analyse_id=derniere_analyse, nom='rvb.jpg') | tojson }}{% else %}null{% endif %},
+  zones: {% if zones %}{{ zones.resultat.foyers | map(attribute='contour') | list | tojson }}{% else %}[]{% endif %},
+  urlZone: {{ url_for('zones.fiche', suivi_id=suivi['id'], numero=0) | tojson }}
+});
+</script>
+{% endif %}
+{% endblock %}

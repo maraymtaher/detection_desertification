@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Segmentation U-Net{% endblock %}
+{% block entete %}Segmentation U-Net{% endblock %}
+{% block soustitre %}Classification de chaque pixel en 5 classes d'occupation du sol à 10 m.{% endblock %}
+{% block contenu %}
+<section class="panneau">
+  <div class="corps">
+    <form class="selecteurs" method="get" style="margin-bottom:0" id="choix">
+      <label>Modèle
+        <select disabled><option>U-Net ({{ modele_courant.fichier if modele_courant else 'unet_meilleur_modele.keras' }})</option></select></label>
+      <label>Image
+        <select name="produit" onchange="this.form.analyse && (this.form.analyse.value=''); this.form.submit()">
+          {% for p in produits %}<option value="{{ p['id'] }}" {{ 'selected' if p['id'] == produit_choisi }}>{{ p['date_acquisition'] }} · {{ p['tuile'] }}</option>{% endfor %}
+        </select></label>
+      {% set de_l_image = analyses | selectattr('produit_id', 'equalto', produit_choisi) | list %}
+      {% if de_l_image %}
+      <label>Résultat
+        <select name="analyse" onchange="this.form.submit()">
+          {% for a in de_l_image %}<option value="{{ a['id'] }}" {{ 'selected' if choisie and a['id'] == choisie['id'] }}>analyse n° {{ a['id'] }} · {{ (a['resume'] | fromjson).surface_km2 | fr(0) }} km²</option>{% endfor %}
+        </select></label>
+      {% endif %}
+      {% if produit_choisi %}
+      <a class="btn btn-principal" href="{{ url_for('analyses.zone', produit_id=produit_choisi) }}">{{ ico("lecture") }} Lancer l'inférence</a>
+      {% endif %}
+    </form>
+  </div>
+</section>
+
+{% for a in en_cours %}
+<div class="message warning" style="margin-top:14px">Analyse n° {{ a['id'] }} (image du {{ a['date_acquisition'] }}) : {{ a['message'] or 'en attente' }} — {{ a['progression'] }} %.
+  <a href="{{ url_for('analyses.detail', analyse_id=a['id']) }}">Suivre</a></div>
+{% endfor %}
+
+{% if choisie %}
+{% set f = url_for('analyses.fichier', analyse_id=choisie['id'], nom='X') %}
+<section class="panneau" style="margin-top:20px">
+  <div class="corps">
+    <div class="trois-vues">
+      <figure class="vue"><figcaption>Image originale (RGB)</figcaption>
+        <div class="cadre-image"><img src="{{ f | replace('/X', '/rvb.jpg') }}" alt="Image Sentinel-2 en couleurs réelles"></div></figure>
+      <figure class="vue"><figcaption>Masque prédit</figcaption>
+        <div class="cadre-image"><img src="{{ f | replace('/X', '/carte.png') }}" alt="Classes prédites"></div></figure>
+      <figure class="vue"><figcaption>Superposition</figcaption>
+        <div class="cadre-image"><img src="{{ f | replace('/X', '/rvb.jpg') }}" alt=""><img class="calque" src="{{ f | replace('/X', '/carte.png') }}" alt="Classes sur l'image"></div></figure>
+    </div>
+    <p class="note">Image du {{ resume.date }} · tuile {{ resume.tuile }} · {{ resume.surface_km2 | fr(0) }} km² · les pixels non classés (nuages) sont transparents.
+      <a href="{{ url_for('vues.cartes', analyse=choisie['id']) }}">Ouvrir sur la carte interactive</a></p>
+  </div>
+</section>
+
+<div class="grille-centre">
+  <section class="panneau">
+    <header><h2>Répartition des classes</h2><p>Part des pixels classés ({{ resume.statistiques.hectares_valides | fr(0) }} ha)</p></header>
+    <div class="corps">
+      <table class="surfaces">
+        {% for (nom, couleur), c in classes_modele | zip(resume.statistiques.classes) %}
+        <tr><td><i class="pastille" style="background:{{ couleur }}"></i></td>
+          <td class="nom-classe">{{ loop.index0 }} – {{ nom }}<div class="barre-classe"><i style="width:{{ c.pourcentage }}%; background:{{ couleur }}"></i></div></td>
+          <td class="num">{{ c.hectares | fr(0) }} ha</td><td class="num fort">{{ c.pourcentage | fr(1) }} %</td></tr>
+        {% endfor %}
+      </table>
+      <p class="note">Non classé (nuages, données manquantes) : {{ resume.statistiques.part_non_classee | fr(2) }} %.</p>
+    </div>
+  </section>
+  <section class="panneau">
+    <header><h2>Traitement</h2></header>
+    <div class="corps">
+      <div class="etat-qualite bon" style="font-size:16px">{{ ico("coche") }} Traitement terminé</div>
+      <dl class="mesures compact">
+        <div><dt>Durée</dt><dd>{% set d = resume.duree_secondes | int %}{{ d // 60 }} min {{ d % 60 }} s</dd></div>
+        <div><dt>Fenêtres</dt><dd>128 × 128 pixels, recouvrement 32</dd></div>
+        <div><dt>Hors zone de validité</dt><dd>{{ resume.part_hors_entrainement | fr(1) }} %</dd></div>
+        <div><dt>Modèle (SHA-256)</dt><dd class="mono">{{ resume.tracabilite.modele.sha256[:16] ~ '…' if resume.tracabilite and resume.tracabilite.modele else 'non enregistré' }}</dd></div>
+      </dl>
+      {% for a in resume.avertissements %}<p class="note alerte-texte">{{ a | virgule }}</p>{% endfor %}
+      <div class="actions-image">
+        <a class="btn btn-secondaire petit" href="{{ url_for('analyses.detail', analyse_id=choisie['id']) }}">Détail et valeurs des pixels</a>
+        <a class="btn btn-secondaire petit" href="{{ url_for('analyses.fichier', analyse_id=choisie['id'], nom='classes.tif') }}">GeoTIFF</a>
+        <a class="btn btn-secondaire petit" href="{{ url_for('rapports.pdf_analyse', analyse_id=choisie['id']) }}">Rapport PDF</a>
+      </div>
+    </div>
+  </section>
+</div>
+{% elif produit_choisi %}
+<section class="panneau" style="margin-top:20px"><div class="vide">Cette image n'a pas encore été segmentée.
+  Cliquez sur « Lancer l'inférence » pour choisir la zone et lancer le U-Net.</div></section>
+{% else %}
+<section class="panneau" style="margin-top:20px"><div class="vide">Aucune image : importez-en une dans
+  <a href="{{ url_for('images.liste') }}">Données Sentinel-2</a>.</div></section>
+{% endif %}
+{% endblock %}

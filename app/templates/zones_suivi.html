@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% macro nb(v, d=1) %}{{ ("%." ~ d ~ "f") | format(v) | replace(".", ",") }}{% endmacro %}
+{% block titre %}Zones à surveiller · suivi n° {{ suivi['id'] }}{% endblock %}
+{% block entete %}Zones à surveiller{% endblock %}
+{% block soustitre %}Suivi n° {{ suivi['id'] }} · tuile {{ suivi['tuile'] }}
+  {%- if resume_suivi %} · {{ resume_suivi.dates[0] }} → {{ resume_suivi.dates[-1] }}{% endif %}{% endblock %}
+{% block actions %}
+<a class="btn btn-secondaire" href="{{ url_for('suivi.detail', suivi_id=suivi['id']) }}">Retour au suivi</a>
+{% endblock %}
+{% block contenu %}
+
+{% if etat is none or etat['statut'] == 'echouee' %}
+{% if etat %}<div class="message danger">{{ etat['message'] }}</div>{% endif %}
+<section class="panneau">
+  <header><h2>Identifier les zones à surveiller</h2>
+    <p>Le système recherche les foyers de perte de végétation les plus étendus et prépare, pour chacun, les images avant/après.</p></header>
+  <div class="corps">
+    <ol class="etapes-texte">
+      <li>La zone est découpée en carrés de 1 km.</li>
+      <li>Les carrés sont classés par surface de perte confirmée (U-Net + baisse du NDVI, taches ≥ 0,5 ha),
+        puis par surface de perte non confirmée. Les 12 premiers carrés non voisins sont retenus.</li>
+      <li>Pour chaque foyer : classes du U-Net et NDVI date par date, transition principale, part de perte progressive,
+        images en vraies couleurs de la première et de la dernière date.</li>
+    </ol>
+    <form method="post" action="{{ url_for('zones.calculer', suivi_id=suivi['id']) }}" style="margin-top:16px">
+      <input type="hidden" name="jeton" value="{{ jeton() }}">
+      <button class="btn btn-principal">{{ ico("alerte") }} Identifier les zones à surveiller</button>
+    </form>
+  </div>
+</section>
+
+{% elif etat['statut'] in ('en_attente', 'en_cours') %}
+<section class="panneau">
+  <header><h2>Recherche en cours</h2><p>Cette page se met à jour toute seule.</p></header>
+  <div class="corps">
+    <div class="jauge"><i id="barre" style="width:{{ etat['progression'] }}%"></i></div>
+    <div class="suivi-ligne"><span id="message">{{ etat['message'] or "En attente…" }}</span>
+      <b id="part">{{ etat['progression'] }} %</b></div>
+  </div>
+</section>
+
+{% else %}
+{% set r = resultat %}
+<div class="indicateurs">
+  <div class="indicateur"><span class="rond rouge">{{ ico("alerte") }}</span>
+    <div><div class="nombre">{{ r.nb_foyers }}</div><div class="nom">Zones à vérifier (carrés de 1 km)</div></div></div>
+  <div class="indicateur"><span class="rond rouge">{{ ico("carte") }}</span>
+    <div><div class="nombre">{{ nb(r.hectares_confirmes_foyers) }} ha</div>
+      <div class="nom">de pertes confirmées dans ces zones, sur {{ nb(r.hectares_confirmes_total) }} ha au total</div></div></div>
+  <div class="indicateur"><span class="rond">{{ ico("coche") }}</span>
+    <div><div class="nombre">{{ bilan.verifies }} / {{ bilan.total }}</div><div class="nom">Zones vérifiées</div></div></div>
+  <div class="indicateur"><span class="rond">{{ ico("coche") }}</span>
+    <div><div class="nombre">{{ bilan.comptes.visible }}</div>
+      <div class="nom">Dégradation visible · {{ bilan.comptes.non_visible }} non visible · {{ bilan.comptes.incertain }} incertain</div></div></div>
+</div>
+
+<div class="grille-resultat">
+  <section class="panneau">
+    <header><h2>Carte des zones</h2><p>Cliquez sur un carré pour ouvrir sa fiche</p></header>
+    <div class="corps"><div id="carte" class="carte haute"></div></div>
+  </section>
+  <section class="panneau">
+    <header><h2>Comment vérifier</h2></header>
+    <div class="corps methode">
+      <ol>
+        <li>Ouvrez une zone : les images de {{ r.dates[0] }} et de {{ r.dates[1] }} s'affichent côte à côte, avec le contour
+          rouge des pixels où la perte de végétation est confirmée.</li>
+        <li>Comparez les deux images à l'intérieur du contour : la végétation a-t-elle disparu ou le sol s'est-il découvert ?</li>
+        <li>Donnez votre avis : visible, pas visible ou incertain. Le système passe à la zone suivante.</li>
+      </ol>
+      <p class="note">Il s'agit d'une photo-interprétation sur images Sentinel-2 à 10 m, pas d'une vérification de terrain.
+        Les zones à vérifier ne sont pas déclarées désertifiées.</p>
+      <div class="telechargements">
+        <a class="btn btn-secondaire" href="{{ url_for('zones.fichier', suivi_id=suivi['id'], nom='foyers.kml') }}">KML (Google Earth)</a>
+        <a class="btn btn-secondaire" href="{{ url_for('zones.fichier', suivi_id=suivi['id'], nom='foyers.geojson') }}">GeoJSON (QGIS)</a>
+      </div>
+    </div>
+  </section>
+</div>
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Liste des zones</h2><p>Classées par surface de perte confirmée</p></header>
+  <div class="defile">
+  <table class="donnees serie">
+    <thead><tr><th>Zone</th><th>Position</th><th class="num">Confirmée</th><th class="num">Non confirmée</th>
+      <th>Transition principale</th><th class="num">NDVI {{ r.dates[0][:4] }} → {{ r.dates[1][:4] }}</th>
+      <th class="num">Perte progressive</th><th>Vérification</th><th></th></tr></thead>
+    <tbody>
+    {% for f in r.foyers %}
+      {% set a = avis.get(f.numero) %}
+      <tr>
+        <td class="mono"><b>{{ f.numero }}</b></td>
+        <td class="mono" style="white-space:nowrap">{{ "%.4f" | format(f.centre[1]) }} N<br>{{ "%.4f" | format(f.centre[0]) }} E</td>
+        <td class="num"><b>{{ nb(f.hectares_confirmes) }} ha</b></td>
+        <td class="num">{{ nb(f.hectares_un_indicateur) }} ha</td>
+        <td>{% if f.transition.de == f.transition.vers %}Pas de changement de classe <small>({{ f.transition.de }})</small>{% else %}{{ f.transition.de }} → {{ f.transition.vers }} <small>({{ nb(f.transition.part, 0) }} %)</small>{% endif %}</td>
+        <td class="num">{% set t0 = f.trajectoire[0].ndvi %}{% set t1 = f.trajectoire[-1].ndvi %}
+          {% if t0 is not none and t1 is not none %}{{ nb(t0, 3) }} → {{ nb(t1, 3) }}{% else %}—{% endif %}</td>
+        <td class="num">{{ nb(f.part_progressive) }} %</td>
+        <td>{% if a %}<span class="puce {{ 'erreur' if a['avis'] == 'visible' else ('ok' if a['avis'] == 'non_visible' else 'neutre') }}"><i></i>{{ libelles_avis[a['avis']] }}</span>
+          {% else %}<span class="puce neutre"><i></i>À vérifier</span>{% endif %}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire" style="padding:5px 13px"
+          href="{{ url_for('zones.fiche', suivi_id=suivi['id'], numero=f.numero) }}">Examiner</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<form method="post" action="{{ url_for('zones.calculer', suivi_id=suivi['id']) }}" style="margin-top:18px"
+      onsubmit="return confirm('Recalculer les zones ? Les avis déjà donnés seront effacés.');">
+  <input type="hidden" name="jeton" value="{{ jeton() }}">
+  <button class="btn btn-secondaire">{{ ico("historique") }} Recalculer les zones</button>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if etat and etat['statut'] in ('en_attente', 'en_cours') %}
+<script src="{{ url_for('static', filename='js/suivi.js') }}"></script>
+<script>suivreAnalyse({{ url_for('zones.etat', suivi_id=suivi['id']) | tojson }});</script>
+{% elif resultat %}
+<script>
+(function () {
+  const boite = document.getElementById("carte");
+  if (typeof L === "undefined") {
+    boite.classList.add("carte-indisponible");
+    boite.innerHTML = "<p>Carte indisponible : connexion Internet requise pour le fond satellite.</p>";
+    return;
+  }
+  const foyers = {{ resultat.foyers | tojson }};
+  const urlFiche = {{ url_for('zones.fiche', suivi_id=suivi['id'], numero=0) | tojson }}.replace(/0$/, "");
+  const carte = L.map("carte");
+  L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxZoom: 17, attribution: "Imagerie © Esri" }).addTo(carte);
+  {% if resume_suivi %}
+  const e = {{ resume_suivi.emprise_wgs84 | tojson }};
+  L.rectangle([[e[1], e[0]], [e[3], e[2]]], { color: "#ffffff", weight: 1, fill: false, interactive: false }).addTo(carte);
+  carte.fitBounds([[e[1], e[0]], [e[3], e[2]]]);
+  {% endif %}
+  foyers.forEach(function (f) {
+    const poly = L.polygon(f.contour.map(function (p) { return [p[1], p[0]]; }),
+      { color: "#ff3b30", weight: 2, fillOpacity: 0.15 }).addTo(carte);
+    poly.bindTooltip("Zone " + f.numero + " · " + String(f.hectares_confirmes).replace(".", ",") + " ha confirmés",
+                     { permanent: false });
+    poly.on("click", function () { window.location = urlFiche + f.numero; });
+    L.marker([f.centre[1], f.centre[0]], { icon: L.divIcon({ className: "etiquette-zone", html: String(f.numero),
+      iconSize: [22, 22] }) }).addTo(carte).on("click", function () { window.location = urlFiche + f.numero; });
+  });
+})();
+</script>
+{% endif %}
+{% endblock %}

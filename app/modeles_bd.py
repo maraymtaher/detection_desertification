@@ -47,6 +47,38 @@ CREATE TABLE IF NOT EXISTS comparaison (
     resume          TEXT NOT NULL DEFAULT '',
     cree_le         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS zones (
+    suivi_id        INTEGER PRIMARY KEY REFERENCES suivi(id),
+    statut          TEXT NOT NULL DEFAULT 'en_attente',
+    progression     INTEGER NOT NULL DEFAULT 0,
+    message         TEXT NOT NULL DEFAULT '',
+    cree_le         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS avis (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    suivi_id        INTEGER NOT NULL REFERENCES suivi(id),
+    numero          INTEGER NOT NULL,           -- numéro du foyer
+    utilisateur_id  INTEGER NOT NULL REFERENCES utilisateur(id),
+    avis            TEXT NOT NULL,              -- visible, non_visible, incertain
+    commentaire     TEXT NOT NULL DEFAULT '',
+    modifie_le      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (suivi_id, numero)
+);
+CREATE TABLE IF NOT EXISTS detection (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    utilisateur_id  INTEGER NOT NULL REFERENCES utilisateur(id),
+    zone            TEXT NOT NULL,            -- zone demandée : ouest,sud,est,nord
+    mois            INTEGER NOT NULL,         -- mois des images (1 à 12)
+    annee_debut     INTEGER NOT NULL,
+    annee_fin       INTEGER NOT NULL,
+    produits        TEXT NOT NULL,            -- produits retenus (un par année)
+    analyses        TEXT NOT NULL DEFAULT '', -- analyses utilisées, dans l'ordre des dates
+    suivi_id        INTEGER,
+    statut          TEXT NOT NULL DEFAULT 'en_attente',
+    progression     INTEGER NOT NULL DEFAULT 0,
+    message         TEXT NOT NULL DEFAULT '',
+    cree_le         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE IF NOT EXISTS suivi (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     utilisateur_id  INTEGER NOT NULL REFERENCES utilisateur(id),
@@ -86,6 +118,10 @@ def initialiser(app):
     colonnes = [c["name"] for c in connexion.execute("PRAGMA table_info(produit)")]
     if "emprise" not in colonnes:
         connexion.execute("ALTER TABLE produit ADD COLUMN emprise TEXT NOT NULL DEFAULT ''")
+    if "profil" not in [c["name"] for c in connexion.execute("PRAGMA table_info(utilisateur)")]:
+        connexion.execute("ALTER TABLE utilisateur ADD COLUMN profil TEXT NOT NULL DEFAULT ''")
+    if "sha256" not in colonnes:      # empreinte de l'archive (traçabilité)
+        connexion.execute("ALTER TABLE produit ADD COLUMN sha256 TEXT NOT NULL DEFAULT ''")
     connexion.commit()
     connexion.close()
 

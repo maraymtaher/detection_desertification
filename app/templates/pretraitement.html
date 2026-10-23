@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Prétraitement{% endblock %}
+{% block entete %}Prétraitement des images{% endblock %}
+{% block soustitre %}Contrôle de l'image et paramètres appliqués avant la segmentation, identiques à ceux de l'entraînement.{% endblock %}
+{% block contenu %}
+{% if not produit %}
+<section class="panneau"><div class="vide">Aucune image. Importez-en une dans <a href="{{ url_for('images.liste') }}">Données Sentinel-2</a>.</div></section>
+{% else %}
+<form class="selecteurs" method="get">
+  <label>Image Sentinel-2
+    <select name="produit" onchange="this.form.submit()">{% for p in produits %}
+      <option value="{{ p['id'] }}" {{ 'selected' if p['id'] == produit['id'] }}>{{ p['date_acquisition'] }} · {{ p['tuile'] }}</option>{% endfor %}</select></label>
+</form>
+
+<nav class="onglets-page" id="etapes">
+  {% for cle, nom in [("verification", "Vérification"), ("masques", "Masques"), ("resolution", "Résolution"), ("decoupage", "Découpage"), ("normalisation", "Normalisation"), ("validation", "Validation")] %}
+  <button type="button" data-onglet="{{ cle }}" class="{{ 'actif' if loop.first }}"><span class="num">{{ loop.index }}</span>{{ nom }}</button>
+  {% endfor %}
+</nav>
+{% if erreur %}<div class="message danger">{{ erreur }}</div>{% endif %}
+
+<div class="grille-centre" style="margin-top:0">
+  <section class="panneau">
+    <header><h2>Aperçu des bandes</h2><p>Tuile entière, sous-échantillonnée · pixels masqués en noir</p></header>
+    <div class="corps">
+      {% if stats %}
+      <div class="vignettes-bandes">
+        {% for b, nom in bandes_apercu %}
+        <figure><img loading="lazy" src="{{ url_for('vues.fichier_controle', produit_id=produit['id'], nom='bande_' ~ b ~ '.png') }}" alt="Bande {{ b }}">
+          <figcaption>{{ b }} ({{ nom }})</figcaption></figure>
+        {% endfor %}
+      </div>
+      {% else %}<div class="vide">Aperçu indisponible.</div>{% endif %}
+    </div>
+  </section>
+  <div style="display:grid; gap:20px; align-content:start">
+    <section class="panneau">
+      <header><h2>Indices calculés</h2><p>Médianes des pixels valides (échantillon de l'image)</p></header>
+      <div class="corps tuiles-indices">
+        {% for nom in ("NDVI", "NDWI", "BSI") %}
+        <div class="tuile-indice"><small>{{ nom }}</small><b>{{ stats.indices[nom] | fr(3) if stats and stats.indices[nom] is not none else '—' }}</b></div>
+        {% endfor %}
+      </div>
+      <div class="corps" style="padding-top:0"><p class="note">Le modèle reçoit aussi le NDRE ; les indices sont recalculés
+        à 10 m pour chaque fenêtre lors de la segmentation. Le SAVI n'est pas utilisé par ce modèle.</p></div>
+    </section>
+    <section class="panneau">
+      <header><h2>Qualité de l'image</h2><p>D'après la couche de classification de scène (SCL) de l'ESA</p></header>
+      <div class="corps">
+        {% if stats and stats.part_nuages is not none %}
+        <dl class="mesures compact">
+          <div><dt>Couverture nuageuse (nuages, ombres, cirrus)</dt><dd>{{ stats.part_nuages | fr(1) }} %</dd></div>
+          <div><dt>Sans donnée</dt><dd>{{ stats.part_sans_donnee | fr(1) }} %</dd></div>
+          <div><dt>Pixels utilisables</dt><dd>{{ stats.part_valide | fr(1) }} %</dd></div>
+        </dl>
+        <div class="barre-classe" style="margin-top:10px"><i style="width:{{ stats.part_valide }}%; background:var(--accent)"></i></div>
+        {% if qualite %}<div class="etat-qualite {{ qualite[0] }}">{{ ico("coche" if qualite[0] == 'bon' else "alerte") }} {{ qualite[1] }}</div>{% endif %}
+        {% if hors_tuiles %}<p class="note alerte-texte">Tuile {{ produit['tuile'] }} hors des tuiles d'entraînement ({{ cm.TUILES_ENTRAINEMENT | sort | join(", ") }}).</p>{% endif %}
+        {% else %}<div class="vide">Non calculée.</div>{% endif %}
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="panneau" style="margin-top:20px">
+  <div class="corps">
+    <div data-panneau="verification">
+      <h3 class="sous-titre">1. Vérification du produit</h3>
+      <dl class="mesures compact">
+        <div><dt>Produit</dt><dd class="mono chemin">{{ produit['nom'] }}</dd></div>
+        <div><dt>Niveau</dt><dd>L2A (réflectance de surface)</dd></div>
+        <div><dt>Date · tuile · satellite</dt><dd>{{ produit['date_acquisition'] }} · {{ produit['tuile'] }} · {{ produit['satellite'] }}</dd></div>
+        <div><dt>Bandes présentes</dt><dd class="mono">{{ stats.bandes_presentes | join(" ") if stats else '—' }} + SCL</dd></div>
+        <div><dt>Taille de la tuile</dt><dd>{% if stats %}{{ stats.taille_pixels[0] | fr(0) }} × {{ stats.taille_pixels[1] | fr(0) }} pixels à 10 m{% else %}—{% endif %}</dd></div>
+      </dl>
+    </div>
+    <div data-panneau="masques" class="d-none">
+      <h3 class="sous-titre">2. Masques</h3>
+      <p>Pixels retirés avant la segmentation (couche SCL) : {% for c in cm.SCL_NUAGES %}<span class="mono">{{ c }}</span>{{ ", " if not loop.last }}{% endfor %}
+        (ombres de nuages, nuages, cirrus) et <span class="mono">{{ cm.SCL_SANS_DONNEE }}</span> (sans donnée). Ils reçoivent la classe
+        <span class="mono">{{ cm.NON_CLASSE }}</span> « non classé ».</p>
+    </div>
+    <div data-panneau="resolution" class="d-none">
+      <h3 class="sous-titre">3. Résolution</h3>
+      <p>B2, B3, B4, B8 sont à 10 m. B5, B6, B7, B8A, B11, B12 (20 m) sont rééchantillonnées à 10 m par interpolation bilinéaire,
+        comme dans le notebook d'entraînement.</p>
+    </div>
+    <div data-panneau="decoupage" class="d-none">
+      <h3 class="sous-titre">4. Découpage</h3>
+      <p>Fenêtres de {{ cm.TAILLE_FENETRE }} × {{ cm.TAILLE_FENETRE }} pixels (1,28 km) avec 32 pixels de recouvrement ; seul le
+        centre de chaque fenêtre est gardé, pour éviter les coutures. Pour la tuile entière : environ {{ nb_fenetres | fr(0) }} fenêtres.</p>
+    </div>
+    <div data-panneau="normalisation" class="d-none">
+      <h3 class="sous-titre">5. Normalisation</h3>
+      <p>Réflectance = (valeur + décalage) / {{ cm.QUANTIFICATION | fr(0) }}, valeurs négatives ramenées à 0. Décalages lus dans les
+        métadonnées : {% if stats %}{% for k, v in stats.decalages.items() %}<span class="mono">{{ k }} {{ v | fr(0) }}</span>{{ ", " if not loop.last }}{% endfor %}{% else %}—{% endif %}.
+        Indices tronqués à 4 décimales.</p>
+    </div>
+    <div data-panneau="validation" class="d-none">
+      <h3 class="sous-titre">6. Validation</h3>
+      <p>{% if qualite %}{{ qualite[1] }}.{% endif %} L'image peut être segmentée : choisissez la zone à analyser à l'étape suivante.</p>
+    </div>
+
+    <h3 class="sous-titre">Paramètres de prétraitement</h3>
+    <div class="cases-verrouillees">
+      <label><input type="checkbox" checked disabled> Masque nuages (SCL : 3, 8, 9, 10)</label>
+      <label><input type="checkbox" checked disabled> Rééchantillonnage bilinéaire à 10 m</label>
+      <label><input type="checkbox" checked disabled> Correction du décalage radiométrique</label>
+      <label><input type="checkbox" checked disabled> Normalisation (÷ {{ cm.QUANTIFICATION | fr(0) }})</label>
+      <label><input type="checkbox" checked disabled> Indices NDVI, NDWI, BSI, NDRE</label>
+      <label><input type="checkbox" checked disabled> Fenêtres {{ cm.TAILLE_FENETRE }} × {{ cm.TAILLE_FENETRE }}, recouvrement 32</label>
+    </div>
+    <p class="note">Ces réglages sont verrouillés : le modèle U-Net a été entraîné avec eux ; les changer rendrait ses prédictions invalides.</p>
+    <div class="barre-boutons">
+      <a class="btn btn-secondaire" href="{{ url_for('images.liste') }}">Annuler</a>
+      <a class="btn btn-principal" href="{{ url_for('analyses.zone', produit_id=produit['id']) }}">Suivant : choisir la zone {{ ico("fleche") }}</a>
+    </div>
+  </div>
+</section>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll("#etapes button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    document.querySelectorAll("#etapes button").forEach(function (x) { x.classList.toggle("actif", x === b); });
+    document.querySelectorAll("[data-panneau]").forEach(function (p) {
+      p.classList.toggle("d-none", p.getAttribute("data-panneau") !== b.getAttribute("data-onglet"));
+    });
+  });
+});
+</script>
+{% endblock %}

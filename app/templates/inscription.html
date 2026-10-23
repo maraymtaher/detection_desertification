@@ -1,20 +1,35 @@
 {% extends "base_public.html" %}
 {% block titre %}Créer un compte{% endblock %}
+{% block titre_volet %}Rejoignez la communauté<br>{{ nom_systeme }}{% endblock %}
+{% block liste_volet %}
+<ul class="liste-volet">
+  <li>{{ ico("satellite") }} Accès aux données satellites</li>
+  <li>{{ ico("courbe") }} Outils d'analyse avancés</li>
+  <li>{{ ico("cible") }} Suivi de la désertification</li>
+  <li>{{ ico("telecharger") }} Exportation des résultats</li>
+</ul>
+{% endblock %}
 {% block contenu %}
-<h2>Créer un compte</h2>
-<p class="intro">Chaque compte dispose de son propre espace d'images et d'analyses.</p>
+<h2>Créer votre compte</h2>
+<p class="intro">Commencez à explorer la plateforme</p>
 <form method="post">
   <input type="hidden" name="jeton" value="{{ jeton() }}">
-  <div class="champ"><label for="nom">Nom</label>
-    <input id="nom" name="nom" required autofocus value="{{ request.form.get('nom', '') }}"></div>
+  <div class="champ"><label for="nom">Nom complet</label>
+    <div class="champ-icone">{{ ico("utilisateur") }}<input id="nom" name="nom" placeholder="Votre nom et prénom" required autofocus value="{{ request.form.get('nom', '') }}"></div></div>
   <div class="champ"><label for="email">Adresse e-mail</label>
-    <input type="email" id="email" name="email" required value="{{ request.form.get('email', '') }}"></div>
+    <div class="champ-icone">{{ ico("courriel") }}<input type="email" id="email" name="email" placeholder="exemple@domaine.com" required value="{{ request.form.get('email', '') }}"></div></div>
   <div class="champ"><label for="mdp">Mot de passe</label>
-    <input type="password" id="mdp" name="mot_de_passe" required minlength="8">
-    <small>Au moins 8 caractères.</small></div>
+    <div class="champ-icone">{{ ico("cadenas") }}<input type="password" id="mdp" name="mot_de_passe" placeholder="Minimum 8 caractères" required minlength="8">
+      <button type="button" class="oeil" data-oeil="mdp" aria-label="Afficher">{{ ico("oeil") }}</button></div></div>
   <div class="champ"><label for="conf">Confirmer le mot de passe</label>
-    <input type="password" id="conf" name="confirmation" required></div>
-  <button class="btn btn-principal btn-large">Créer le compte</button>
+    <div class="champ-icone">{{ ico("cadenas") }}<input type="password" id="conf" name="confirmation" placeholder="Répétez votre mot de passe" required>
+      <button type="button" class="oeil" data-oeil="conf" aria-label="Afficher">{{ ico("oeil") }}</button></div></div>
+  <div class="champ"><label for="profil">Profil</label>
+    <div class="champ-icone">{{ ico("utilisateur") }}<select id="profil" name="profil">
+      {% for p in ["Étudiant", "Chercheur", "Enseignant", "Agent technique", "Autre"] %}<option {{ 'selected' if request.form.get('profil') == p }}>{{ p }}</option>{% endfor %}
+    </select></div></div>
+  <label class="se-souvenir"><input type="checkbox" name="accepte" value="1" required> J'accepte que mes images et mes analyses soient enregistrées sur cette installation.</label>
+  <button class="btn btn-principal btn-large">Créer mon compte {{ ico("fleche") }}</button>
 </form>
-<p class="bascule">Déjà inscrit ? <a href="{{ url_for('auth.connexion') }}">Se connecter</a></p>
+<p class="bascule">Déjà un compte ? <a href="{{ url_for('auth.connexion') }}">Se connecter</a></p>
 {% endblock %}

@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_icones.html" import ico %}
 {% from "_statut.html" import statut %}
+{% from "_assistant.html" import assistant %}
 {% block titre %}Image du {{ produit['date_acquisition'] }}{% endblock %}
 {% block entete %}Image du {{ produit['date_acquisition'] }}{% endblock %}
 {% block soustitre %}Tuile {{ produit['tuile'] }} · produit vérifié et prêt pour l'analyse.{% endblock %}
@@ -9,6 +10,7 @@
 {% else %}<span class="puce ok"><i></i>Produit vérifié</span>{% endif %}
 {% endblock %}
 {% block contenu %}
+{{ assistant(2, produit) }}
 {% for a in avertissements %}
   <div class="message warning">{{ a }}</div>
 {% endfor %}

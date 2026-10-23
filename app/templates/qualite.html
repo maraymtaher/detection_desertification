@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% macro nb(v, d=1) %}{{ ("%." ~ d ~ "f") | format(v) | replace(".", ",") }}{% endmacro %}
+{% set ev = evaluation %}
+{% block titre %}Évaluation du modèle{% endblock %}
+{% block entete %}Évaluation du modèle{% endblock %}
+{% block soustitre %}Modèle U-Net · jeu de test 2025-2026 · comparaison avec des masques de référence automatiques.{% endblock %}
+{% block contenu %}
+<nav class="onglets-page" id="onglets">
+  <button type="button" data-onglet="metriques" class="actif">Métriques</button>
+  <button type="button" data-onglet="matrice">Matrice de confusion</button>
+  <button type="button" data-onglet="modeles">Courbes et comparaisons</button>
+  <button type="button" data-onglet="echantillons">Échantillons et données</button>
+</nav>
+
+<div data-panneau="metriques">
+<div class="kpi-mini">
+  <div><small>IoU moyen</small><b>{{ ev.globales[2].valeur | fr(2) }}</b><small>recouvrement prédiction / référence</small></div>
+  <div><small>Dice moyen</small><b>{{ ev.globales[1].valeur | fr(2) }}</b><small>égal au F1 macro (2·VP / (2·VP + FP + FN))</small></div>
+  <div><small>Précision moyenne</small><b class="absent">non mesurée</b><small>absente des sorties enregistrées</small></div>
+  <div><small>Rappel moyen</small><b class="absent">non mesuré</b><small>absent des sorties enregistrées</small></div>
+</div>
+<div style="height:20px"></div>
+{# ================= 1. Le modèle ================= #}
+<section class="panneau">
+  <header><h2>1. Performances du modèle U-Net</h2>
+    <p>{{ evaluation.jeu_de_test }}</p></header>
+  <div class="corps">
+    <div class="indicateurs">
+      {% for m in evaluation.globales %}
+      <div class="indicateur"><span class="rond">{{ ico("modele") }}</span>
+        <div><div class="nombre">{{ nb(m.valeur, 3) }}</div><div class="nom">{{ m.nom }}</div></div></div>
+      {% endfor %}
+    </div>
+    <table class="donnees" style="margin-top:14px">
+      <thead><tr><th>Mesure</th><th>Ce qu'elle indique</th></tr></thead>
+      <tbody>{% for m in evaluation.globales %}<tr><td><b>{{ m.nom }}</b></td><td>{{ m.explication }}</td></tr>{% endfor %}</tbody>
+    </table>
+    <div class="deux-colonnes" style="margin-top:18px">
+      <div>
+        <h3 class="sous-titre">Avec des classes regroupées</h3>
+        <table class="donnees">
+          <thead><tr><th>Regroupement</th><th class="num">Exactitude</th><th class="num">Kappa</th></tr></thead>
+          <tbody>{% for r in evaluation.regroupements %}
+            <tr><td>{{ r.nom }}</td><td class="num">{{ nb(r.exactitude, 3) }}</td><td class="num">{{ nb(r.kappa, 3) }}</td></tr>
+          {% endfor %}</tbody>
+        </table>
+        <p class="note">La confusion vient surtout de « sol nu » et « sable/dune » : une fois ces deux classes
+          réunies, l'exactitude passe de {{ nb(evaluation.globales[0].valeur, 3) }} à {{ nb(evaluation.regroupements[0].exactitude, 3) }}.</p>
+      </div>
+      <div>
+        <h3 class="sous-titre">Selon la saison</h3>
+        <table class="donnees">
+          <thead><tr><th>Mois des images de test</th><th class="num">Kappa</th></tr></thead>
+          <tbody>{% for s in evaluation.saisons %}<tr><td>{{ s.nom }}</td><td class="num">{{ nb(s.kappa, 3) }}</td></tr>{% endfor %}</tbody>
+        </table>
+        <p class="note">Les résultats sont stables d'une saison à l'autre.</p>
+      </div>
+    </div>
+    <p class="note" style="margin-top:12px"><b>Référence :</b> {{ evaluation.reference }}. <b>Source :</b> {{ evaluation.source }}.</p>
+  </div>
+</section>
+
+{% set pp = evaluation.par_paysage %}{% set st = evaluation.stabilite %}
+<div class="grille-centre">
+  <section class="panneau">
+    <header><h2>Précision selon le paysage</h2><p>{{ pp.source }}</p></header>
+    <table class="donnees" style="margin-top:6px">
+      <thead><tr><th>Paysage dominant</th><th class="num">Fenêtres</th><th style="width:40%">Exactitude moyenne</th><th class="num">Fenêtres &lt; 0,6</th></tr></thead>
+      <tbody>{% for l in pp.lignes %}
+        <tr><td>{{ l.paysage }}</td><td class="num">{{ l.fenetres }}</td>
+          <td><div style="display:flex; gap:8px; align-items:center"><div class="barre-classe" style="flex:1"><i style="width:{{ l.exactitude * 100 }}%; background:var(--accent)"></i></div>
+            <span class="mono">{{ l.exactitude | fr(3) }}</span></div></td>
+          <td class="num">{{ l.sous_06 | fr(1) }} %</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    <div class="corps"><p class="note">Le modèle est le plus sûr sur l'eau et les surfaces nues, le moins sûr sur la végétation
+      clairsemée et les paysages mélangés.</p></div>
+  </section>
+  <section class="panneau">
+    <header><h2>Stabilité des cartes dans le temps</h2><p>{{ st.source }}</p></header>
+    <dl class="mesures compact corps">
+      <div><dt>Pixels valides aux 10 dates</dt><dd>{{ st.valides_toutes_dates | fr(1) }} %</dd></div>
+      <div><dt>Même classe ≥ 8 années sur 10 (5 classes)</dt><dd>{{ st.stable_5_classes | fr(1) }} %</dd></div>
+      <div><dt>Même groupe ≥ 8 années sur 10 (eau, végétation, surface nue)</dt><dd>{{ st.stable_3_groupes | fr(1) }} %</dd></div>
+      <div><dt>Surface nue stable</dt><dd>{{ st.stable_surface_nue | fr(1) }} %</dd></div>
+      <div><dt>Végétation dense stable</dt><dd>{{ st.stable_vegetation_dense | fr(1) }} %</dd></div>
+    </dl>
+    <div class="corps" style="padding-top:0"><p class="note">Une carte stable d'une année à l'autre n'invente pas de
+      changements : c'est une condition pour qu'un changement détecté ait un sens.</p></div>
+  </section>
+</div>
+
+{# ================= 5. Limites ================= #}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>5. Limites à connaître</h2></header>
+  <div class="corps methode"><ul>{% for l in evaluation.limites %}<li>{{ l }}</li>{% endfor %}</ul>
+  <p class="note">Modèle en service : {% if modele %}<span class="mono">{{ modele.fichier }}</span> ·
+    empreinte SHA-256 <span class="mono" title="{{ modele.sha256 }}">{{ modele.sha256[:16] }}…</span>
+    {% else %}fichier du modèle introuvable sur cette machine{% endif %}</p></div>
+</section>
+</div>
+
+<div data-panneau="matrice" class="d-none">
+<section class="panneau">
+  <header><h2>Matrice de confusion et métriques par classe</h2><p>Classes prédites (colonnes) contre masques de référence (lignes)</p></header>
+  <div class="corps">
+    <div class="vide" style="text-align:left">La matrice de confusion à 5 classes et les précisions / rappels par classe n'ont pas été
+      enregistrés dans les sorties des notebooks : ils ne sont donc pas affichés ici, pour ne pas montrer de valeurs inventées.
+      Pour les ajouter, il suffit d'exporter <span class="mono">confusion_matrix</span> et <span class="mono">classification_report</span>
+      (scikit-learn) du notebook d'évaluation dans <span class="mono">moteur/evaluation_modele.json</span>.</div>
+    <h3 class="sous-titre">Ce qui est mesuré par classe ou par groupe</h3>
+    <table class="donnees">
+      <thead><tr><th>Mesure</th><th class="num">Valeur</th><th>Source</th></tr></thead>
+      <tbody>
+        <tr><td>F1 de la classe « surface nue » (sol nu + sable), U-Net</td><td class="num">{{ ev.comparaison_classique.lignes[1].f1 | fr(3) }}</td><td>notebook v1</td></tr>
+        <tr><td>Rappel de la classe « surface nue », U-Net</td><td class="num">{{ ev.comparaison_classique.lignes[1].rappel | fr(3) }}</td><td>notebook v1</td></tr>
+        {% for r in ev.regroupements %}<tr><td>Exactitude · {{ r.nom }}</td><td class="num">{{ r.exactitude | fr(3) }}</td><td>notebook v1</td></tr>{% endfor %}
+        {% for l in ev.par_paysage.lignes %}<tr><td>Exactitude moyenne · fenêtres dominées par « {{ l.paysage }} »</td><td class="num">{{ l.exactitude | fr(3) }}</td><td>notebook v6</td></tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+</div>
+
+<div data-panneau="modeles" class="d-none">
+{# ================= 2. Comparaison avec une méthode classique ================= #}
+{% set cc = evaluation.comparaison_classique %}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>2. Comparaison avec une méthode classique</h2><p>{{ cc.titre }}</p></header>
+  <div class="corps">
+    <table class="donnees">
+      <thead><tr><th>Méthode</th><th class="num">F1</th><th class="num">Rappel</th><th style="width:40%">Rappel (part des surfaces nues retrouvées)</th></tr></thead>
+      <tbody>{% for l in cc.lignes %}
+        <tr><td><b>{{ l.methode }}</b></td><td class="num">{{ nb(l.f1, 3) }}</td><td class="num">{{ nb(l.rappel, 3) }}</td>
+          <td><div class="barre-classe"><i style="width:{{ l.rappel * 100 }}%; background:{{ 'var(--accent)' if loop.last else 'var(--sable)' }}"></i></div></td></tr>
+      {% endfor %}</tbody>
+    </table>
+    <p class="note">Règle classique utilisée : {{ cc.regle }}. Sur les mêmes images de test, la règle retrouve
+      {{ nb(cc.lignes[0].rappel * 100, 0) }} % des surfaces nues, le U-Net {{ nb(cc.lignes[1].rappel * 100, 0) }} %.
+      Dans le suivi temporel, le NDVI n'est plus un concurrent : il sert de seconde mesure, indépendante de la
+      classification, pour confirmer une dégradation.</p>
+  </div>
+</section>
+
+{# ================= 2 bis. Comparaison des architectures ================= #}
+{% set cm_ = evaluation.comparaison_modeles %}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Comparaison avec d'autres méthodes d'apprentissage</h2><p>{{ cm_.source }}</p></header>
+  <div class="defile">
+  <table class="donnees" style="margin-top:6px">
+    <thead><tr><th>Méthode</th><th class="num">Paramètres</th><th class="num">Exactitude</th><th class="num">Kappa</th>
+      <th class="num">F1 macro</th><th class="num">IoU macro</th><th class="num">F1 surface nue</th><th class="num">ms / fenêtre</th></tr></thead>
+    <tbody>{% for l in cm_.lignes %}
+      <tr class="{{ 'ligne-choisie' if l.retenu }}"><td>{% if l.retenu %}<b>{{ l.methode }}</b>{% else %}{{ l.methode }}{% endif %}</td>
+        <td class="num">{{ l.parametres | fr(0) if l.parametres is not none else '—' }}</td>
+        {% for k in ('exactitude', 'kappa', 'f1', 'iou', 'f1_nu') %}<td class="num">{{ l[k] | fr(3) if l[k] is not none else '—' }}</td>{% endfor %}
+        <td class="num">{{ l.ms | fr(1) if l.ms is not none else '—' }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+  <div class="corps"><p class="note">Le U-Net obtient le meilleur F1 macro et le meilleur F1 « surface nue » ; DeepLabV3+ est
+    équivalent (écart inférieur à un point, non significatif avec un seul entraînement) mais compte 1,7 fois plus de
+    paramètres et il est presque 2 fois plus lent. La règle par seuils n'existe que pour la classe « surface nue ».</p></div>
+</section>
+
+</div>
+
+<div data-panneau="echantillons" class="d-none">
+{# ================= 3. Les images ================= #}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>3. Qualité de chaque image analysée</h2>
+    <p>Une image très nuageuse ou en dehors de la zone de validité donne une carte moins fiable.</p></header>
+  {% if images %}
+  <table class="donnees" style="margin-top:8px">
+    <thead><tr><th>Date</th><th>Analyse</th><th class="secondaire">Saison</th>
+      <th style="width:30%">Pixels non classés (nuages, données manquantes)</th><th class="num">Hors validité</th>
+      <th class="secondaire">Traçabilité</th></tr></thead>
+    <tbody>
+    {% for i in images %}
+      <tr><td><b>{{ i.date }}</b></td>
+        <td><a href="{{ url_for('analyses.detail', analyse_id=i.id) }}">n° {{ i.id }}</a></td>
+        <td class="secondaire">{{ i.saison }}</td>
+        <td><div style="display:flex; gap:10px; align-items:center">
+          <div class="barre-classe" style="flex:1"><i style="width:{{ [i.non_classe, 100] | min }}%; background:var(--sable)"></i></div>
+          <span class="mono">{{ nb(i.non_classe, 2) }} %</span></div></td>
+        <td class="num">{{ nb(i.hors, 1) }} %</td>
+        <td class="secondaire">{% if i.tracee %}<span class="puce ok"><i></i>Complète</span>
+          {% else %}<span class="puce neutre"><i></i>Sans empreinte du modèle</span>{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <div class="corps">
+    <p class="note">Image la plus couverte : {{ pire.date }} ({{ nb(pire.non_classe, 2) }} % de pixels non classés).
+      Les pixels non classés sont exclus des surfaces et des comparaisons ; ils ne sont pas devinés.
+      {% if images | rejectattr("tracee") | list %}Les analyses « sans empreinte du modèle » ont été calculées avant
+      l'ajout de la traçabilité : les relancer pour l'enregistrer.{% endif %}</p>
+  </div>
+  {% else %}
+  <div class="vide">Aucune analyse terminée.</div>
+  {% endif %}
+</section>
+
+{# ================= 4. Vérification humaine ================= #}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>4. Vérification humaine des zones à surveiller</h2>
+    <p>Avis donnés sur les images en couleurs réelles, zone par zone.</p></header>
+  <div class="corps">
+  {% for v in verifications %}
+    {% set z = v.zones %}
+    <h3 class="sous-titre">Suivi n° {{ v.suivi['id'] }} · {{ z.verifies }} zone(s) vérifiée(s) sur {{ z.total }}</h3>
+    {% if z.verifies %}
+    <div class="indicateurs">
+      <div class="indicateur"><span class="rond rouge">{{ ico("coche") }}</span>
+        <div><div class="nombre">{{ z.comptes.visible }}</div><div class="nom">Dégradation visible</div></div></div>
+      <div class="indicateur"><span class="rond sable">{{ ico("alerte") }}</span>
+        <div><div class="nombre">{{ z.comptes.incertain }}</div><div class="nom">Incertain</div></div></div>
+      <div class="indicateur"><span class="rond neutre">{{ ico("carte") }}</span>
+        <div><div class="nombre">{{ z.comptes.non_visible }}</div><div class="nom">Pas de dégradation visible</div></div></div>
+      <div class="indicateur"><span class="rond">{{ ico("analyse") }}</span>
+        <div><div class="nombre">{{ nb(z.part_visible, 0) }} %</div>
+          <div class="nom">confirmées à l'œil · entre {{ nb(z.intervalle[0], 0) }} et {{ nb(z.intervalle[1], 0) }} % (95 %)</div></div></div>
+    </div>
+    <p class="note">Sur {{ z.verifies }} zones vérifiées, {{ z.comptes.visible }} montrent une dégradation visible.
+      Avec si peu de zones, la vraie proportion est connue avec une marge : l'intervalle de confiance de Wilson
+      à 95 % va de {{ nb(z.intervalle[0], 0) }} à {{ nb(z.intervalle[1], 0) }} %. Les zones « incertaines » sont
+      comptées comme non confirmées. Cette vérification est faite par une personne qui connaissait le résultat du
+      modèle : ce n'est pas une validation de terrain.</p>
+    {% else %}
+    <p class="note">Aucun avis pour l'instant.</p>
+    {% endif %}
+    <a class="btn btn-secondaire" href="{{ url_for('zones.detail', suivi_id=v.suivi['id']) }}">Ouvrir les zones de ce suivi</a>
+  {% else %}
+    <div class="vide">Aucune zone à surveiller calculée. Elles se calculent depuis la page « Zones à surveiller ».</div>
+  {% endfor %}
+  </div>
+</section>
+
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll("#onglets button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    document.querySelectorAll("#onglets button").forEach(function (x) { x.classList.toggle("actif", x === b); });
+    document.querySelectorAll("[data-panneau]").forEach(function (p) {
+      p.classList.toggle("d-none", p.getAttribute("data-panneau") !== b.getAttribute("data-onglet"));
+    });
+  });
+});
+</script>
+{% endblock %}

@@ -1,0 +1,195 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% macro km(ha) %}{% set v = ha / 100 %}{% if v | abs < 0.05 %}0,0{% else %}{{ v | fr(1 if v | abs < 100 else 0) }}{% endif %} km²{% endmacro %}
+{% set COURTS = ["Eau", "Vég. dense", "Vég. clairsemée", "Sol nu", "Sable/Dune"] %}
+{% macro valp(p) %}{% if p is none %}—{% elif p < 0.001 %}&lt; 0,001{% else %}{{ p | fr(3) }}{% endif %}{% endmacro %}
+{% macro mot(t) %}{% if not t %}<span class="tendance neutre">—</span>{% elif t.sens.startswith('hausse') %}<span class="tendance hausse">↑ hausse</span>{% elif t.sens.startswith('baisse') %}<span class="tendance baisse">↓ baisse</span>{% else %}<span class="tendance neutre">→ aucune</span>{% endif %}{% endmacro %}
+{% block titre %}Analyse temporelle{% endblock %}
+{% block entete %}Évolution des classes{% if choisi %} ({{ resume.dates[0][:4] }} – {{ resume.dates[-1][:4] }}){% endif %}{% endblock %}
+{% block soustitre %}Comparaison des années : surfaces, cartes, changements et tendances statistiques.{% endblock %}
+{% block actions %}
+<a class="btn btn-secondaire" href="{{ url_for('suivi.liste') }}">{{ ico("historique") }} Créer / gérer les suivis</a>
+{% if choisi %}<a class="btn btn-principal" href="{{ url_for('suivi.fichier', suivi_id=choisi['id'], nom='serie.csv') }}">{{ ico("telecharger") }} Exporter</a>{% endif %}
+{% endblock %}
+{% block contenu %}
+{% if not choisi %}
+<section class="panneau"><div class="vide">Aucune analyse temporelle. Lancez une <a href="{{ url_for('detection.page') }}">détection</a>
+  ou créez un suivi avec au moins 5 images de la même zone et de la même saison.</div></section>
+{% else %}
+{% set r = resume %}
+<nav class="onglets-page" id="onglets">
+  <button type="button" data-onglet="graphiques" class="{{ 'actif' if onglet == 'graphiques' }}">{{ ico("courbe") }} Graphiques</button>
+  <button type="button" data-onglet="cartes" class="{{ 'actif' if onglet == 'cartes' }}">{{ ico("compare") }} Cartes comparatives</button>
+  <button type="button" data-onglet="changement" class="{{ 'actif' if onglet == 'changement' }}">{{ ico("alerte") }} Changement</button>
+</nav>
+
+<form class="selecteurs" method="get" id="filtres">
+  <input type="hidden" name="onglet" id="champ-onglet" value="{{ onglet }}">
+  <label>Zone d'étude (suivi)<select name="suivi" onchange="this.form.submit()">
+    {% for s in suivis %}<option value="{{ s['id'] }}" {{ 'selected' if s['id'] == choisi['id'] }}>n° {{ s['id'] }} · {{ s['tuile'] }}</option>{% endfor %}</select></label>
+  <label>Période<select disabled><option>{{ r.dates[0][:4] }} – {{ r.dates[-1][:4] }} ({{ r.nb_dates }} images)</option></select></label>
+  <label>Surface<select name="vue" onchange="this.form.submit()">
+    <option value="terre" {{ 'selected' if vue == 'terre' }}>Terre ferme</option>
+    <option value="zone" {{ 'selected' if vue == 'zone' }}>Toute la zone (lac compris)</option></select></label>
+  <label>Classe<select name="classe" onchange="this.form.submit()"><option value="-1">Toutes</option>
+    {% for c in choix_classes %}<option value="{{ c }}" {{ 'selected' if classe == c }}>{{ classes[c] }}</option>{% endfor %}</select></label>
+  <input type="hidden" name="date_a" value="{{ cartes_comparees.date_a }}"><input type="hidden" name="date_b" value="{{ cartes_comparees.date_b }}">
+</form>
+
+{# ======================= Onglet Graphiques ======================= #}
+<div data-panneau="graphiques" class="{{ 'd-none' if onglet != 'graphiques' }}">
+<div class="grille-centre" style="margin-top:0">
+  <section class="panneau">
+    <header><h2>Surfaces par année</h2><p>{{ 'Terre ferme' if vue == 'terre' else 'Toute la zone' }} · km²</p></header>
+    <div class="corps">{{ barres }}
+      <div class="legende">{% for c in choix_classes if classe in (-1, c) %}<span><i class="pastille" style="background:{{ couleurs[c] }}"></i>{{ classes[c] }}</span>{% endfor %}</div>
+    </div>
+  </section>
+  <section class="panneau">
+    <header><h2>Évolution des surfaces</h2><p>En pointillé : terres nues (sol nu + sable)</p></header>
+    <div class="corps">{{ graphe }}
+      <div class="legende">{% for c in indices %}<span><i class="pastille" style="background:{{ couleurs[c] }}"></i>{{ r.classes[c] }}</span>{% endfor %}</div>
+    </div>
+  </section>
+</div>
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Tendances statistiques</h2>
+    <p>Test de Mann-Kendall (n = {{ r.nb_dates }}), seuil {{ r.niveau_signification | fr(2) }} ; pente de Sen</p></header>
+  <table class="donnees" style="margin-top:6px">
+    <thead><tr><th>Classe</th><th>Tendance</th><th class="num">S</th><th class="num">τ</th><th class="num">p</th><th class="num">Pente de Sen</th><th class="num">Première → dernière date</th></tr></thead>
+    <tbody>{% for c, t in tendances %}
+      <tr><td><i class="pastille" style="background:{{ couleurs[c] }}"></i> {{ t.classe }}</td><td>{{ mot(t) }}</td>
+        <td class="num">{{ t.s if t.s is not none else '—' }}</td><td class="num">{{ t.tau | fr(3) if t.tau is not none else '—' }}</td>
+        <td class="num">{{ valp(t.p) }}</td>
+        <td class="num">{% if t.pente_ha_par_an is not none %}{{ t.pente_ha_par_an | fr(0) }} ha/an{% else %}—{% endif %}</td>
+        <td class="num">{{ '+' if t.variation_ha >= 5 }}{{ km(t.variation_ha) }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  <div class="corps"><p class="note">Significatif si p &lt; {{ r.niveau_signification | fr(2) }}. Une tendance statistique ne démontre pas, à elle
+    seule, une cause environnementale (pluie, crue du lac, culture…).</p></div>
+</section>
+{% if ndvi %}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Indice de végétation (NDVI)</h2><p>Médiane hors du lac à chaque date</p></header>
+  <div class="corps grille-ndvi">
+    <div>{{ graphe_ndvi }}</div>
+    <dl class="mesures compact">
+      <div><dt>Première / dernière date</dt><dd>{{ ndvi.medianes[0] | fr(3) }} → {{ ndvi.medianes[-1] | fr(3) }}</dd></div>
+      <div><dt>S ; p</dt><dd>{{ ndvi.s }} ; {{ valp(ndvi.p) }}</dd></div>
+      <div><dt>Pente de Sen</dt><dd>{% if ndvi.pente_par_an is not none %}{{ ndvi.pente_par_an | fr(4) }} / an{% else %}—{% endif %}</dd></div>
+    </dl>
+  </div>
+</section>
+{% endif %}
+</div>
+
+{# ======================= Onglet Cartes comparatives ======================= #}
+{% set cc = cartes_comparees %}
+<div data-panneau="cartes" class="{{ 'd-none' if onglet != 'cartes' }}">
+<section class="panneau">
+  <div class="corps">
+    <form class="selecteurs" method="get">
+      <input type="hidden" name="suivi" value="{{ choisi['id'] }}"><input type="hidden" name="vue" value="{{ vue }}">
+      <input type="hidden" name="classe" value="{{ classe }}"><input type="hidden" name="onglet" value="cartes">
+      <label>Première date<select name="date_a" onchange="this.form.submit()">{% for d in r.dates %}<option {{ 'selected' if d == cc.date_a }}>{{ d }}</option>{% endfor %}</select></label>
+      <label>Seconde date<select name="date_b" onchange="this.form.submit()">{% for d in r.dates %}<option {{ 'selected' if d == cc.date_b }}>{{ d }}</option>{% endfor %}</select></label>
+    </form>
+    <div class="trois-vues" style="grid-template-columns: 1fr 1fr 0.8fr">
+      {% for cle, date in (("a", cc.date_a), ("b", cc.date_b)) %}
+      <figure class="vue"><figcaption>{{ date }}</figcaption>
+        <div class="cadre-image">{% if cc[cle] %}
+          <img src="{{ url_for('analyses.fichier', analyse_id=cc[cle]['id'], nom='rvb.jpg') }}" alt="">
+          <img class="calque" style="opacity:.85" src="{{ url_for('analyses.fichier', analyse_id=cc[cle]['id'], nom='carte.png') }}" alt="Classes du {{ date }}">{% endif %}</div></figure>
+      {% endfor %}
+      <div>
+        {% if cc.focus %}
+        <div class="tuile-indice" style="margin-bottom:12px"><small>{{ cc.focus.nom }}</small>
+          <b class="{{ 'hausse' if cc.focus.variation > 0 else 'baisse' }}">{{ '+' if cc.focus.variation > 0 }}{{ cc.focus.relative | fr(1) if cc.focus.relative is not none else '—' }} %</b>
+          <small>{{ km(cc.focus.a) }} → {{ km(cc.focus.b) }}</small></div>
+        {% endif %}
+        <table class="donnees">
+          <thead><tr><th>Classe</th><th class="num">Variation</th></tr></thead>
+          <tbody>{% for x in cc.classes %}
+            <tr><td><i class="pastille" style="background:{{ x.couleur }}"></i> {{ x.nom.split(' (')[0] }}</td>
+              <td class="num"><b class="{{ 'hausse' if x.variation >= 5 else 'baisse' if x.variation <= -5 }}">{{ '+' if x.variation >= 5 }}{{ km(x.variation) }}</b>
+                {% if x.relative is not none %}<br><small>{{ '+' if x.relative > 0 }}{{ x.relative | fr(1) }} %</small>{% endif %}</td></tr>
+          {% endfor %}</tbody>
+        </table>
+      </div>
+    </div>
+    <p class="note">Deux dates seules peuvent différer à cause de la pluie de l'année ou du niveau du lac : les tendances
+      sur toutes les dates (onglet Graphiques) sont plus fiables qu'une comparaison de deux images.</p>
+  </div>
+</section>
+</div>
+
+{# ======================= Onglet Changement ======================= #}
+<div data-panneau="changement" class="{{ 'd-none' if onglet != 'changement' }}">
+<div class="grille-centre" style="margin-top:0">
+  <section class="panneau">
+    <header><h2>Carte des changements</h2><p>Règle du mémoire : changement d'état (U-Net) confirmé par la baisse du NDVI, taches ≥ 0,5 ha</p></header>
+    <div class="corps">
+      <div class="vue"><div class="cadre-image" style="aspect-ratio:auto; height:360px">
+        {% if cc.b %}<img src="{{ url_for('analyses.fichier', analyse_id=cc.b['id'], nom='rvb.jpg') }}" alt="">{% endif %}
+        <img class="calque" style="opacity:.95" src="{{ url_for('suivi.fichier', suivi_id=choisi['id'], nom='synthese.png') }}" alt="Carte des changements"></div></div>
+      <div class="legende">{% for c in r.bilans.synthese.categories if c.code != 0 %}<span><i class="pastille" style="background:{{ c.couleur }}"></i>{{ c.nom }} · {{ km(c.hectares) }}</span>{% endfor %}</div>
+      <a class="btn btn-secondaire petit" href="{{ url_for('suivi.detail', suivi_id=choisi['id']) }}">Carte interactive et détails</a>
+    </div>
+  </section>
+  <section class="panneau">
+    <header><h2>Gains et pertes par classe</h2><p>Classe des {{ r.periode_debut | length }} premières images → des {{ r.periode_fin | length }} dernières</p></header>
+    <table class="donnees" style="margin-top:6px">
+      <thead><tr><th>Classe</th><th class="num">Perdu</th><th class="num">Gagné</th><th class="num">Bilan</th></tr></thead>
+      <tbody>{% for b in bilan_classes %}
+        <tr><td><i class="pastille" style="background:{{ b.couleur }}"></i> {{ b.nom }}</td>
+          <td class="num">{{ km(b.perdu) }}</td><td class="num">{{ km(b.gagne) }}</td>
+          <td class="num"><b class="{{ 'hausse' if b.net >= 5 else 'baisse' if b.net <= -5 }}">{{ '+' if b.net >= 5 }}{{ km(b.net) }}</b></td></tr>
+      {% endfor %}</tbody>
+    </table>
+  </section>
+</div>
+<section class="panneau" style="margin-top:20px">
+  <header class="avec-reglage"><div><h2>Matrice de transition (ha)</h2><p>Lignes : début · colonnes : fin</p></div>
+    <a class="btn btn-secondaire petit" href="{{ url_for('suivi.fichier', suivi_id=choisi['id'], nom='transitions.csv') }}">CSV</a></header>
+  <div class="corps defile">
+    <table class="matrice">
+      <thead><tr><th>Début \ Fin</th>{% for nom in classes %}<th><i class="pastille" style="background:{{ couleurs_classes[loop.index0] }}"></i> {{ COURTS[loop.index0] }}</th>{% endfor %}</tr></thead>
+      <tbody>{% for ligne in matrice %}{% set a = loop.index0 %}
+        <tr><th title="{{ classes[a] }}"><i class="pastille" style="background:{{ couleurs_classes[a] }}"></i> {{ COURTS[a] }}</th>
+          {% for v in ligne %}{% set b = loop.index0 %}
+          <td class="{{ 'diagonale' if a == b }}" style="{% if a != b and maximum and v > 0 %}background:rgba(191,67,55,{{ (0.08 + 0.6 * v / maximum) | round(2) }}){% endif %}"
+              title="{{ classes[a] }} → {{ classes[b] }} : {{ v | fr(0) }} ha">{{ v | fr(0) }}</td>{% endfor %}</tr>
+      {% endfor %}</tbody>
+    </table>
+  </div>
+</section>
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Comparaison des saisons</h2><p>Un suivi par saison permet de vérifier qu'une tendance ne dépend pas de la date des images</p></header>
+  <div class="defile">
+  <table class="donnees" style="margin-top:6px">
+    <thead><tr><th>Suivi</th><th>Période</th><th>Mois</th><th>Terres nues</th><th>Vég. dense</th><th>Vég. clairsemée</th><th>Eau</th><th>NDVI</th><th class="num">Pertes confirmées</th></tr></thead>
+    <tbody>{% for c in comparaison %}
+      <tr class="{{ 'ligne-choisie' if c.suivi['id'] == choisi['id'] }}">
+        <td><a href="{{ url_for('statistiques.page', suivi=c.suivi['id'], onglet='changement') }}">n° {{ c.suivi['id'] }}</a></td>
+        <td>{{ c.periode }}<br><small>{{ c.nb }} images</small></td><td>{{ c.mois }}</td>
+        {% for t in (c.terres_nues, c.veg_saine, c.veg_clairsemee, c.eau, c.ndvi) %}<td>{{ mot(t) }}{% if t %}<br><small>p = {{ valp(t.p) }}</small>{% endif %}</td>{% endfor %}
+        <td class="num">{{ c.degradation | fr(2) ~ ' %' if c.degradation is not none else '—' }}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  </div>
+</section>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+<script>
+document.querySelectorAll("#onglets button").forEach(function (b) {
+  b.addEventListener("click", function () {
+    const nom = b.getAttribute("data-onglet");
+    document.querySelectorAll("#onglets button").forEach(function (x) { x.classList.toggle("actif", x === b); });
+    document.querySelectorAll("[data-panneau]").forEach(function (p) { p.classList.toggle("d-none", p.getAttribute("data-panneau") !== nom); });
+    const champ = document.getElementById("champ-onglet"); if (champ) { champ.value = nom; }
+  });
+});
+</script>
+{% endblock %}

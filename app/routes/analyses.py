@@ -14,9 +14,10 @@ from app.modeles_bd import bd
 from app.routes.auth import connexion_requise
 from moteur.config_modele import EMPRISE_ENTRAINEMENT, LIBELLES_SAISONS, saison
 from moteur.lecture_safe import lire_produit
+from moteur.tracabilite import sha256_fichier
 
 # Fichiers de résultats qu'un utilisateur peut consulter ou télécharger
-FICHIERS_RESULTATS = {"carte.png", "controle.png", "classes.tif", "statistiques.csv"}
+FICHIERS_RESULTATS = {"carte.png", "rvb.jpg", "controle.png", "classes.tif", "statistiques.csv"}
 
 bp = Blueprint("analyses", __name__)
 
@@ -44,7 +45,11 @@ def _reponse(ok, message, url=None, code=200):
 @connexion_requise
 def importer():
     if request.method == "GET":
-        return render_template("importer.html")
+        produits = bd().execute(
+            "SELECT p.*, (SELECT COUNT(*) FROM analyse a WHERE a.produit_id = p.id) AS nb_analyses "
+            "FROM produit p WHERE p.utilisateur_id = ? ORDER BY p.date_acquisition DESC, p.id DESC",
+            (g.utilisateur["id"],)).fetchall()
+        return render_template("importer.html", produits=produits)
 
     fichier = request.files.get("archive")
     if fichier is None or not fichier.filename:
@@ -75,11 +80,11 @@ def importer():
     os.replace(temporaire, definitif)
     curseur = bd().execute(
         "INSERT INTO produit (utilisateur_id, nom, satellite, tuile, "
-        "date_acquisition, version_traitement, chemin, avertissements) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "date_acquisition, version_traitement, chemin, avertissements, sha256) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (g.utilisateur["id"], produit.nom, produit.satellite, produit.tuile,
          produit.date, produit.version_traitement, str(definitif),
-         "\n".join(produit.avertissements)))
+         "\n".join(produit.avertissements), sha256_fichier(definitif)))
     bd().commit()
     return _reponse(True, "Produit importé et vérifié.",
                     url_for("analyses.fiche", produit_id=curseur.lastrowid))
@@ -134,7 +139,8 @@ def emprise_du_produit(produit):
 
 def analyse_ou_404(analyse_id):
     ligne = bd().execute(
-        "SELECT a.*, p.date_acquisition, p.tuile, p.nom AS nom_produit "
+        "SELECT a.*, p.date_acquisition, p.tuile, p.nom AS nom_produit, "
+        "p.chemin AS chemin_produit "
         "FROM analyse a JOIN produit p ON p.id = a.produit_id "
         "WHERE a.id = ? AND a.utilisateur_id = ?",
         (analyse_id, g.utilisateur["id"])).fetchone()
@@ -222,8 +228,52 @@ def fichier(analyse_id, nom):
     analyse = analyse_ou_404(analyse_id)
     if nom not in FICHIERS_RESULTATS or analyse["statut"] != "terminee":
         abort(404)
+    if nom == "rvb.jpg" and not (Path(analyse["dossier"]) / nom).exists():
+        # Analyses antérieures : l'image est créée à la première demande
+        from moteur.apercu import ecrire_image_rvb
+        resume = json.loads(analyse["resume"])
+        try:
+            ecrire_image_rvb(analyse["chemin_produit"], resume["zone_pixels"],
+                             Path(analyse["dossier"]) / nom)
+        except Exception:
+            abort(404)
     return send_from_directory(analyse["dossier"], nom,
                                as_attachment=nom.endswith((".tif", ".csv")))
+
+
+@bp.route("/analyses/<int:analyse_id>/pixel")
+@connexion_requise
+def pixel(analyse_id):
+    """Valeurs d'un pixel cliqué sur la carte : classe prédite et
+    les 14 canaux d'entrée du modèle, relus dans l'archive."""
+    from moteur import apercu
+    from moteur.config_modele import CLASSES, COULEURS, NON_CLASSE
+    analyse = analyse_ou_404(analyse_id)
+    if analyse["statut"] != "terminee":
+        abort(404)
+    try:
+        lon, lat = float(request.args["lon"]), float(request.args["lat"])
+    except (KeyError, ValueError):
+        abort(400)
+    resume = json.loads(analyse["resume"])
+    try:
+        v = apercu.valeurs_pixel(analyse["chemin_produit"],
+                                 Path(analyse["dossier"]) / "classes.tif",
+                                 resume["zone_pixels"], lon, lat)
+    except Exception as e:
+        return jsonify(ok=False, message=f"Lecture impossible : {e}"), 500
+    if v is None:
+        return jsonify(ok=False, message="Point en dehors de la zone analysée.")
+    o, s_, e_, n = EMPRISE_ENTRAINEMENT
+    classe = v["classe"]
+    return jsonify(
+        ok=True, lon=round(lon, 6), lat=round(lat, 6),
+        ligne=v["ligne"], colonne=v["colonne"],
+        classe=("Non classé (nuage ou donnée manquante)" if classe == NON_CLASSE
+                else CLASSES[classe] if classe < len(CLASSES) else str(classe)),
+        couleur=COULEURS[classe] if classe < len(COULEURS) else "#dcdcdc",
+        dans_validite=o <= lon <= e_ and s_ <= lat <= n,
+        valide=v["valide"], bandes=v["bandes"], indices=v["indices"])
 
 
 @bp.route("/analyses/<int:analyse_id>/supprimer", methods=["POST"])

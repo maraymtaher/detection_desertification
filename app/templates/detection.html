@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Détection{% endblock %}
+{% block entete %}Détection de la dégradation des terres{% endblock %}
+{% block soustitre %}Choisissez une zone et une période : le système analyse les images, compare les années et localise les pertes de végétation.{% endblock %}
+{% block contenu %}
+{% if not produits %}
+<section class="panneau"><div class="vide">Aucune image Sentinel-2 disponible. Importez d'abord au moins deux images
+  du même mois de deux années différentes dans <a href="{{ url_for('images.liste') }}">Images satellitaires</a>.</div></section>
+{% else %}
+<form method="post" action="{{ url_for('detection.lancer') }}" id="form-detection">
+<input type="hidden" name="jeton" value="{{ jeton() }}">
+<input type="hidden" name="zone" id="zone">
+<div class="grille-detection">
+  <section class="panneau">
+    <header><h2>Zone d'étude</h2>
+      <p>Contour blanc : images disponibles · cadre orange : zone de validité du modèle · vert : zone choisie</p></header>
+    <div class="corps"><div id="carte" class="carte tres-haute"></div></div>
+  </section>
+
+  <aside class="panneau etapes-detection">
+    <div class="etape-detection">
+      <div class="titre-etape"><span class="num-etape">1</span><b>La zone</b></div>
+      <div class="boutons-zone">
+        <button type="button" class="btn btn-secondaire" id="zone-validite">Zone de validité du modèle</button>
+        <button type="button" class="btn btn-secondaire" id="dessiner">Dessiner une zone</button>
+        <button type="button" class="btn btn-secondaire" id="toute-image">Toute l'image</button>
+      </div>
+      <dl class="mesures compact">
+        <div><dt>Surface</dt><dd id="val-surface">—</dd></div>
+        <div><dt>Hors zone de validité</dt><dd id="val-hors">—</dd></div>
+        <div><dt>Durée de calcul par image</dt><dd id="val-duree">—</dd></div>
+      </dl>
+      <div id="info-recadrage" class="message success d-none">La zone a été recadrée au bord des images.</div>
+      <div id="alerte-zone" class="message warning d-none"></div>
+      <button type="button" class="btn-lien" id="effacer">Effacer la zone</button>
+    </div>
+
+    <div class="etape-detection">
+      <div class="titre-etape"><span class="num-etape">2</span><b>La période</b></div>
+      <div class="champs-periode">
+        <label>Mois des images
+          <select name="mois" id="mois">
+            {% for m in mois %}{% set n = loop.index %}
+            <option value="{{ n }}" {{ 'selected' if n == mois_defaut }} {{ 'disabled' if not mois_dispo[n] }}>{{ m }}{% if mois_dispo[n] %} ({{ mois_dispo[n] }} image{{ 's' if mois_dispo[n] > 1 }}){% endif %}</option>
+            {% endfor %}
+          </select></label>
+        <label>De <select name="annee_debut" id="debut">{% for a in annees %}<option {{ 'selected' if loop.first }}>{{ a }}</option>{% endfor %}</select></label>
+        <label>À <select name="annee_fin" id="fin">{% for a in annees %}<option {{ 'selected' if loop.last }}>{{ a }}</option>{% endfor %}</select></label>
+      </div>
+      <p class="note">Une seule saison à la fois : comparer février à septembre mélangerait la saison et l'évolution réelle.</p>
+      <div id="images-trouvees" class="images-trouvees"></div>
+    </div>
+
+    <div class="etape-detection">
+      <div class="titre-etape"><span class="num-etape">3</span><b>La détection</b></div>
+      <ol class="chaine-texte">
+        <li>Segmentation U-Net de chaque image (analyses déjà faites réutilisées)</li>
+        <li>Comparaison des années : changement d'état (U-Net) confirmé par le NDVI, Mann-Kendall</li>
+        <li>Localisation des foyers de perte et images avant / après</li>
+      </ol>
+      <button class="btn btn-principal btn-large" id="lancer" disabled>{{ ico("analyse") }} Lancer la détection</button>
+      <p class="note" id="raison-blocage"></p>
+    </div>
+  </aside>
+</div>
+</form>
+{% endif %}
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Détections effectuées</h2><p>Chaque détection garde ses analyses, son suivi et ses zones</p></header>
+  {% if detections %}
+  <table class="donnees" style="margin-top:6px">
+    <thead><tr><th>N°</th><th>Période</th><th>Mois</th><th class="num">Images</th><th class="secondaire">Lancée le</th><th>État</th><th></th></tr></thead>
+    <tbody>{% for d in detections %}
+      <tr><td class="mono">{{ d['id'] }}</td><td><b>{{ d['annee_debut'] }} – {{ d['annee_fin'] }}</b></td>
+        <td>{{ mois[d['mois'] - 1] }}</td><td class="num">{{ d['produits'].split(',') | length }}</td>
+        <td class="secondaire">{{ d['cree_le'][:16] }} UTC</td><td>{{ statut(d['statut']) }}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire petit" href="{{ url_for('detection.resultat', detection_id=d['id']) }}">Voir le résultat</a></td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucune détection pour l'instant.</div>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+{% if produits %}
+<script src="{{ url_for('static', filename='js/zone.js') }}"></script>
+<script>
+(function () {
+  const produits = {{ produits | tojson }};
+  const mois = {{ mois | tojson }};
+  activerZone({ emprise: {{ emprise | tojson }}, validite: {{ emprise_modele | tojson }}, surfaceMax: {{ surface_max }} });
+
+  const champZone = document.getElementById("zone");
+  const lancer = document.getElementById("lancer");
+  const liste = document.getElementById("images-trouvees");
+  const raison = document.getElementById("raison-blocage");
+  function croise(a, b) { return Math.min(a[2], b[2]) > Math.max(a[0], b[0]) && Math.min(a[3], b[3]) > Math.max(a[1], b[1]); }
+
+  // Images retenues : une par année, du mois choisi, qui recouvrent la zone
+  function verifier() {
+    const m = Number(document.getElementById("mois").value);
+    let d = Number(document.getElementById("debut").value), f = Number(document.getElementById("fin").value);
+    if (d > f) { const t = d; d = f; f = t; }
+    const zone = champZone.value ? champZone.value.split(",").map(Number) : null;
+    const parAnnee = {};
+    produits.forEach(function (p) {
+      if (p.mois === m && p.annee >= d && p.annee <= f && (!zone || croise(zone, p.emprise)) && !parAnnee[p.annee]) {
+        parAnnee[p.annee] = p.date;
+      }
+    });
+    const annees = Object.keys(parAnnee).sort();
+    liste.innerHTML = annees.length
+      ? "<b>" + annees.length + " image(s) retenue(s)</b> · " + mois[m - 1] + "<div class='puces-annees'>"
+        + annees.map(function (a) { return "<span>" + parAnnee[a] + "</span>"; }).join("") + "</div>"
+      : "<b>Aucune image</b> pour ce mois et cette période.";
+    let bloque = "";
+    if (!zone) { bloque = "Choisissez une zone sur la carte."; }
+    else if (annees.length < {{ min_images }}) { bloque = "Il faut au moins {{ min_images }} années différentes."; }
+    else if (annees.length < {{ conseil_images }}) {
+      raison.textContent = "Moins de {{ conseil_images }} images : la comparaison début/fin est possible, pas les tendances pixel par pixel.";
+    } else { raison.textContent = ""; }
+    if (bloque) { raison.textContent = bloque; }
+    const tropGrand = document.getElementById("alerte-zone").classList.contains("danger");
+    lancer.disabled = !!bloque || tropGrand;
+  }
+  ["mois", "debut", "fin"].forEach(function (id) { document.getElementById(id).addEventListener("change", verifier); });
+  // zone.js modifie le champ « zone » sans événement : on surveille sa valeur
+  let derniere = null;
+  setInterval(function () { if (champZone.value !== derniere) { derniere = champZone.value; verifier(); } }, 300);
+  document.getElementById("form-detection").addEventListener("submit", function () {
+    lancer.disabled = true; lancer.textContent = "Lancement…";
+  });
+  verifier();
+})();
+</script>
+{% endif %}
+{% endblock %}

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_icones.html" import ico %}
+{% from "_assistant.html" import assistant %}
 {% block titre %}Choisir la zone{% endblock %}
 {% block entete %}Choisir la zone à analyser{% endblock %}
 {% block soustitre %}Image du {{ produit['date_acquisition'] }} · tuile {{ produit['tuile'] }}{% endblock %}
@@ -7,6 +8,7 @@
 <a class="btn btn-secondaire" href="{{ url_for('analyses.fiche', produit_id=produit['id']) }}">Retour à l'image</a>
 {% endblock %}
 {% block contenu %}
+{{ assistant(3, produit) }}
 <div class="grille-zone">
   <section class="panneau">
     <header><h2>Carte</h2>

@@ -41,12 +41,15 @@ def inscription():
                       f"{config.LONGUEUR_MIN_MOT_DE_PASSE} caractères.")
         elif mdp != request.form.get("confirmation", ""):
             erreur = "Les deux mots de passe ne sont pas identiques."
+        elif request.form.get("accepte") != "1":
+            erreur = "Cochez la case d'accord pour créer le compte."
         if erreur is None:
             try:
+                profil = request.form.get("profil", "")[:40]
                 bd().execute(
-                    "INSERT INTO utilisateur (nom, email, mot_de_passe) "
-                    "VALUES (?, ?, ?)",
-                    (nom, email, generate_password_hash(mdp)))
+                    "INSERT INTO utilisateur (nom, email, mot_de_passe, profil) "
+                    "VALUES (?, ?, ?, ?)",
+                    (nom, email, generate_password_hash(mdp), profil))
                 bd().commit()
             except sqlite3.IntegrityError:
                 erreur = "Un compte existe déjà avec cette adresse."
@@ -68,7 +71,9 @@ def connexion():
                                          request.form.get("mot_de_passe", "")):
             session.clear()
             session["utilisateur_id"] = ligne["id"]
-            return redirect(url_for("main.accueil"))
+            # « Se souvenir de moi » : session gardée 30 jours, sinon fermée avec le navigateur
+            session.permanent = request.form.get("souvenir") == "1"
+            return redirect(url_for("auth.verification"))
         flash("Adresse e-mail ou mot de passe incorrect.", "danger")
     return render_template("connexion.html")
 
@@ -77,3 +82,29 @@ def connexion():
 def deconnexion():
     session.clear()
     return redirect(url_for("main.accueil"))
+
+
+@bp.route("/verification")
+def verification():
+    """Écran de transition après la connexion (maquette 5)."""
+    if g.utilisateur is None:
+        return redirect(url_for("auth.connexion"))
+    uid = g.utilisateur["id"]
+    return render_template(
+        "verification.html",
+        nb_images=bd().execute("SELECT COUNT(*) FROM produit WHERE utilisateur_id = ?", (uid,)).fetchone()[0],
+        nb_analyses=bd().execute("SELECT COUNT(*) FROM analyse WHERE utilisateur_id = ? AND statut = 'terminee'",
+                                 (uid,)).fetchone()[0])
+
+
+@bp.route("/mot-de-passe-oublie", methods=["GET", "POST"])
+def mot_de_passe_oublie():
+    """Sans serveur d'e-mails (installation locale), aucun lien ne peut être
+    envoyé : la page l'indique et donne la commande de réinitialisation."""
+    if request.method == "POST":
+        email = request.form.get("email", "").strip().lower()
+        if not EMAIL.match(email):
+            flash("Adresse e-mail invalide.", "danger")
+            return render_template("mot_de_passe.html", envoye=False)
+        return render_template("mot_de_passe.html", envoye=True, email=email)
+    return render_template("mot_de_passe.html", envoye=False)

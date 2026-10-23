@@ -2,48 +2,36 @@
 {% from "_icones.html" import ico %}
 {% from "_statut.html" import statut %}
 {% macro nb(v, d=1) %}{{ ("%." ~ d ~ "f") | format(v) | replace(".", ",") }}{% endmacro %}
-{% macro ha(v) %}{{ "{:,}".format(v | round | int) | replace(",", " ") }}{% endmacro %}
-{% macro signe_ha(v) %}{{ "+" if v > 0 else "" }}{{ ha(v) }}{% endmacro %}
-{% macro valeur_p(p) %}{% if p is none %}—{% elif p < 0.001 %}&lt; 0,001{% else %}{{ nb(p, 3) }}{% endif %}{% endmacro %}
+{# Surfaces affichées en km² : 1 km² = 100 ha #}
+{% macro km(ha) %}{% set v = ha / 100 %}{% if v >= 100 %}{{ "{:,}".format(v | round | int) | replace(",", " ") }}{% else %}{{ nb(v, 1) }}{% endif %} km²{% endmacro %}
+{% macro skm(ha) %}{{ "+" if ha > 0 else ("−" if ha < 0 else "") }}{{ km(ha | abs) }}{% endmacro %}
+{% macro mot_tendance(t) %}{% if t.sens.startswith('hausse') %}<span class="tendance hausse">↑ augmente</span>{% elif t.sens.startswith('baisse') %}<span class="tendance baisse">↓ diminue</span>{% else %}<span class="tendance neutre">→ pas de tendance nette</span>{% endif %}{% endmacro %}
 
-{% macro table_tendances(liste, couleurs) %}
-<table class="donnees serie">
-  <thead><tr><th>Classe</th><th class="num">Première → dernière date</th>
-    <th class="num">Pente de Sen</th><th class="num">Tau</th><th class="num">p</th><th>Conclusion du test</th></tr></thead>
-  <tbody>
-  {% for t in liste if t %}
-    {% set c = resume.classes.index(t.classe) %}
-    <tr{% if loop.last %} class="ligne-fusion"{% endif %}>
-      <td><i class="pastille" style="background:{{ couleurs[c] }}"></i> {{ t.classe }}</td>
-      <td class="num">{{ signe_ha(t.variation_ha) }} ha</td>
-      <td class="num">{% if t.pente_ha_par_an is not none %}{{ signe_ha(t.pente_ha_par_an) }} ha/an{% else %}—{% endif %}</td>
-      <td class="num">{% if t.tau is not none %}{{ nb(t.tau, 2) }}{% else %}—{% endif %}</td>
-      <td class="num">{{ valeur_p(t.p) }}</td>
-      <td>{% if t.sens.startswith('pas') %}{{ t.sens }}{% else %}<b>{{ t.sens }}</b>{% endif %}</td>
-    </tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endmacro %}
-
-{% macro table_surfaces(lignes, debut) %}
-<table class="donnees serie">
-  <thead><tr><th>Date</th>{% for nom in resume.classes[debut:] %}<th class="num">{{ nom }}</th>{% endfor %}</tr></thead>
-  <tbody>
-  {% for s in lignes %}
-    <tr><td class="mono">{{ s.date }}</td>
-      {% for h in s.hectares[debut:] %}<td class="num">{{ ha(h) }} <small>{{ nb(s.pourcentages[loop.index0 + debut]) }} %</small></td>{% endfor %}</tr>
-  {% endfor %}
-  </tbody>
-</table>
-{% endmacro %}
+{% set TITRES = {
+  "synthese": "Changements détectés",
+  "occupation": "Changement d'état (U-Net)",
+  "progression": "Évolution année par année",
+  "productivite": "Végétation (NDVI)" } %}
+{% set EXPLICATIONS = {
+  "synthese": "Règle du mémoire : une perte de végétation (végétation devenue surface nue selon le U-Net) est confirmée si le NDVI moyen baisse de plus de 0,10 sur une tache d'au moins 0,5 ha.",
+  "occupation": "Compare l'état dominant (eau, végétation ou surface nue, au moins 2 images sur 3) des premières images à celui des dernières, selon le modèle U-Net.",
+  "progression": "Montre les pixels dont la couverture végétale baisse (ou monte) régulièrement, d'année en année, et pas seulement une fois.",
+  "productivite": "Montre où la quantité de végétation verte, mesurée directement par le satellite (NDVI), baisse ou monte régulièrement." } %}
+{% set LIBELLES = {
+  "synthese": {4: "Perte de végétation confirmée (U-Net + NDVI)", 1: "Perte non confirmée par le NDVI", 2: "Gain de végétation (≥ 0,5 ha)", 0: "Pas de changement", 3: "Changement dû au lac", 5: "Petit gain (< 0,5 ha)"},
+  "occupation": {1: "Végétation devenue surface nue", 2: "Surface nue devenue végétation", 3: "Changement dû au lac", 0: "Pas de changement"},
+  "progression": {1: "Perte qui se confirme chaque année", 2: "Gain qui se confirme chaque année", 0: "Pas d'évolution régulière"},
+  "productivite": {1: "La végétation baisse", 2: "La végétation augmente", 0: "Pas d'évolution nette"} } %}
 
 {% block titre %}Suivi n° {{ suivi['id'] }}{% endblock %}
 {% block entete %}Suivi temporel n° {{ suivi['id'] }}{% endblock %}
-{% block soustitre %}Tuile {{ suivi['tuile'] }} · {{ nb(surface) }} km²
-  {%- if resume %} · {{ resume.nb_dates }} dates, du {{ resume.dates[0] }} au {{ resume.dates[-1] }}{% endif %}{% endblock %}
+{% block soustitre %}Tuile {{ suivi['tuile'] }} · zone de {{ nb(surface, 0) }} km²
+  {%- if resume %} · {{ resume.nb_dates }} images, de {{ resume.dates[0][:4] }} à {{ resume.dates[-1][:4] }}{% endif %}{% endblock %}
 {% block actions %}
 {{ statut(suivi['statut']) }}
+{% if suivi['statut'] == 'terminee' and resume and resume.get('version') == version_methode %}
+<a class="btn btn-principal" style="padding:5px 13px" href="{{ url_for('rapports.pdf_suivi', suivi_id=suivi['id']) }}">{{ ico("rapport") }} Rapport PDF</a>
+{% endif %}
 {% if suivi['statut'] in ('terminee', 'echouee') %}
 <form method="post" action="{{ url_for('suivi.relancer', suivi_id=suivi['id']) }}">
   <input type="hidden" name="jeton" value="{{ jeton() }}">
@@ -56,7 +44,7 @@
 {% if suivi['statut'] in ('en_attente', 'en_cours') %}
 <section class="panneau">
   <header><h2>Calcul en cours</h2>
-    <p>Au premier calcul, le NDVI de chaque date est lu dans les archives ; il est ensuite conservé.</p></header>
+    <p>Au premier calcul, la végétation (NDVI) de chaque image est lue dans les archives ; elle est ensuite conservée.</p></header>
   <div class="corps">
     <div class="jauge"><i id="barre" style="width:{{ suivi['progression'] }}%"></i></div>
     <div class="suivi-ligne"><span id="message">{{ suivi['message'] or "En attente…" }}</span>
@@ -67,63 +55,72 @@
 {% elif suivi['statut'] == 'echouee' %}
 <div class="message danger">{{ suivi['message'] }}</div>
 
-{% elif resume.get('version') != 2 %}
-<div class="message warning">Ce suivi a été calculé avec l'ancienne méthode (occupation du sol seule).
-  Cliquez sur « Recalculer » pour obtenir la productivité (NDVI), la terre ferme, les terres nues,
-  l'évolution progressive et la synthèse.</div>
+{% elif resume.get('version') != version_methode %}
+<div class="message warning">Ce suivi a été calculé avec l'ancienne méthode. Cliquez sur « Recalculer ».</div>
 
 {% else %}
 {% set b = resume.bilans %}
-{% set couleurs = (classes_modele | map(attribute=1) | list) + ["#b98b4e"] %}
+{% set couleurs = (classes_modele | map(attribute=1) | list) + ["#b98b4e", "#2e7d32"] %}
+{% set a0 = resume.dates[0][:4] %}{% set a1 = resume.dates[-1][:4] %}
 {% for a in resume.avertissements %}<div class="message warning">{{ a }}</div>{% endfor %}
 
-{# ---------------- 1. Résultat ---------------- #}
+{# ================= 1. La réponse ================= #}
 {% if b.synthese.disponible %}
 {% set s = b.synthese.categories %}
-<section class="panneau">
-  <header><h2>Résultat de la détection</h2>
-    <p>Terre ferme comparable : {{ ha(b.synthese.hectares_compares) }} ha · deux indicateurs combinés selon la
-      règle UNCCD « un dehors, tous dehors » · période {{ resume.dates[0][:4] }}–{{ resume.dates[-1][:4] }}</p></header>
-  <div class="corps">
-    <div class="indicateurs">
-      <div class="indicateur"><span class="rond rouge">{{ ico("alerte") }}</span>
-        <div><div class="nombre">{{ nb(s[0].pourcentage + s[1].pourcentage) }} %</div>
-          <div class="nom">Dégradation (au moins un indicateur) · {{ ha(s[0].hectares + s[1].hectares) }} ha</div></div></div>
-      <div class="indicateur"><span class="rond rouge">{{ ico("coche") }}</span>
-        <div><div class="nombre">{{ nb(s[0].pourcentage) }} %</div>
-          <div class="nom">Dégradation confirmée par les deux · {{ ha(s[0].hectares) }} ha</div></div></div>
-      <div class="indicateur"><span class="rond">{{ ico("fleche") }}</span>
-        <div><div class="nombre">{{ nb(s[2].pourcentage) }} %</div>
-          <div class="nom">Amélioration · {{ ha(s[2].hectares) }} ha</div></div></div>
-      <div class="indicateur"><span class="rond neutre">{{ ico("carte") }}</span>
-        <div><div class="nombre">{{ nb(s[3].pourcentage) }} %</div>
-          <div class="nom">Stable · {{ ha(s[3].hectares) }} ha</div></div></div>
-    </div>
-    <p class="lecture">
-      Sur la terre ferme, <b>{{ nb(s[0].pourcentage + s[1].pourcentage) }} %</b> de la surface montre une dégradation
-      selon au moins un indicateur, dont <b>{{ nb(s[0].pourcentage) }} %</b> confirmée à la fois par l'occupation du sol
-      et par la productivité ; <b>{{ nb(s[2].pourcentage) }} %</b> montre une amélioration.
-      {% if resume.ndvi %}Le NDVI médian de la terre ferme passe de {{ nb(resume.ndvi.medianes[0], 3) }}
-      à {{ nb(resume.ndvi.medianes[-1], 3) }}
-      ({% if resume.ndvi.p is not none and resume.ndvi.p < resume.niveau_signification %}tendance significative,
-      p {{ valeur_p(resume.ndvi.p) }}{% else %}pas de tendance significative, p = {{ valeur_p(resume.ndvi.p) }}{% endif %}).{% endif %}
-      {% if resume.persistance is not none %}{{ nb(resume.persistance) }} % des pertes de couverture végétale
-      entre le début et la fin se confirment d'année en année.{% endif %}
-    </p>
-  </div>
+{% set deg = reponse.confirmee_ha %}{% set amel = reponse.amelioration_ha %}{% set ton = reponse.ton %}
+{% set ndvi_baisse = reponse.ndvi_sens == "baisse" %}{% set ndvi_hausse = reponse.ndvi_sens == "hausse" %}
+{% set v = resume.validite %}
+
+<section class="reponse {{ ton }}">
+  <p class="question">Y a-t-il une dégradation des terres dans cette zone entre {{ a0 }} et {{ a1 }} ?</p>
+  <h2>{{ reponse.titre }}</h2>
+  <p>Sur la zone analysée ({{ km(b.synthese.hectares_compares) }}), les <b>pertes de végétation confirmées ({{ km(deg) }})</b> sont
+    {% if deg < amel %}plus petites{% elif deg > amel %}plus grandes{% else %}égales{% endif %} que les
+    <b>gains de végétation ({{ km(amel) }})</b>{% if resume.ndvi %} ; la végétation mesurée par le satellite (NDVI)
+    {% if ndvi_hausse %}<b>augmente</b>{% elif ndvi_baisse %}<b>diminue</b>{% else %}ne montre <b>pas d'évolution nette</b>{% endif %}{% endif %}
+    et les terres nues hors du lac {% if reponse.nues_sens == "hausse" %}<b>augmentent</b>{% elif reponse.nues_sens == "baisse" %}<b>diminuent</b>{% else %}ne montrent <b>pas de tendance nette</b>{% endif %}.
+    {% if deg > 0 %}Les pertes confirmées sont localisées dans les zones à surveiller.{% endif %}</p>
+  <a class="btn btn-principal" href="{{ url_for('zones.detail', suivi_id=suivi['id']) }}">{{ ico("alerte") }} Voir les zones à surveiller</a>
 </section>
+
+{% if v %}
+<div class="message {{ 'success' if v.statut == 'valide' else 'warning' }}" style="margin-top:14px">
+  {% if v.statut == 'valide' %}<b>Résultat validé :</b> toute la zone est dans la zone d'entraînement du modèle (Bol, lac Tchad).
+  {% elif v.statut == 'partiel' %}<b>Résultat partiellement validé :</b> {{ nb(v.part_zone) }} % de la zone
+    ({{ km(v.hectares_dedans) }}) est dans la zone d'entraînement du modèle ; le reste est <b>indicatif</b>.
+  {% else %}<b>Résultat indicatif :</b> la zone est hors de la zone d'entraînement du modèle ; il n'a pas été validé ici.{% endif %}
+</div>
 {% endif %}
 
-{# ---------------- 2. Cartes ---------------- #}
+<div class="indicateurs" style="margin-top:20px">
+  <div class="indicateur"><span class="rond rouge">{{ ico("alerte") }}</span>
+    <div><div class="nombre">{{ km(s[0].hectares) }}</div>
+      <div class="nom">pertes confirmées (U-Net + NDVI) · {{ nb(s[0].pourcentage, 2) }} % de la zone</div></div></div>
+  <div class="indicateur"><span class="rond">{{ ico("coche") }}</span>
+    <div><div class="nombre">{{ km(s[1].hectares) }}</div>
+      <div class="nom">pertes non confirmées par le NDVI · {{ nb(s[1].pourcentage) }} %</div></div></div>
+  <div class="indicateur"><span class="rond">{{ ico("fleche") }}</span>
+    <div><div class="nombre">{{ km(amel) }}</div>
+      <div class="nom">gains de végétation ≥ 0,5 ha · {{ nb(s[2].pourcentage) }} %</div></div></div>
+  <div class="indicateur"><span class="rond neutre">{{ ico("carte") }}</span>
+    <div><div class="nombre">{{ km(s[3].hectares) }}</div>
+      <div class="nom">ne changent pas · {{ nb(s[3].pourcentage) }} %</div></div></div>
+</div>
+<p class="note">1 km² = 100 hectares. Une perte est <b>confirmée</b> quand deux sources indépendantes concordent :
+  le modèle U-Net (végétation devenue surface nue) et le NDVI mesuré directement sur les images (baisse de plus de 0,10),
+  sur une tache d'au moins 0,5 ha.</p>
+{% endif %}
+
+{# ================= 2. Où ? ================= #}
 <section class="panneau" style="margin-top:20px">
-  <header class="avec-reglage"><div><h2>Cartes de détection</h2>
-    <p>Début ({{ resume.periode_debut | join(", ") }}) · fin ({{ resume.periode_fin | join(", ") }})</p></div>
+  <header class="avec-reglage"><div><h2>Où se trouvent les changements ?</h2>
+    <p id="explication-carte">{{ EXPLICATIONS.synthese }}</p></div>
     <label class="reglage">Opacité <input type="range" id="opacite" min="0" max="100" value="90"></label>
   </header>
   <div class="corps">
     <div class="onglets" id="choix-carte">
       {% for nom in ("synthese", "occupation", "progression", "productivite") if b[nom].disponible %}
-      <button type="button" data-carte="{{ nom }}" class="{{ 'actif' if loop.first }}">{{ b[nom].titre }}</button>
+      <button type="button" data-carte="{{ nom }}" data-explication="{{ EXPLICATIONS[nom] }}" class="{{ 'actif' if loop.first }}">{{ TITRES[nom] }}</button>
       {% endfor %}
     </div>
     <div class="grille-resultat">
@@ -131,117 +128,195 @@
       <div>
         {% for nom in ("synthese", "occupation", "progression", "productivite") if b[nom].disponible %}
         <div class="{{ 'd-none' if not loop.first }}" data-bilan="{{ nom }}">
-          <p class="note" style="margin:0 0 8px">Sur {{ ha(b[nom].hectares_compares) }} ha comparables</p>
           <table class="surfaces">
             {% for c in b[nom].categories %}
             <tr>
               <td><i class="pastille" style="background:{{ c.couleur }}"></i></td>
-              <td class="nom-classe">{{ c.nom }}
+              <td class="nom-classe">{{ LIBELLES[nom][c.code] }}
                 <div class="barre-classe"><i style="width:{{ c.pourcentage }}%; background:{{ c.couleur }}"></i></div></td>
-              <td class="num">{{ ha(c.hectares) }} ha</td>
-              <td class="num fort">{{ nb(c.pourcentage, 2) }} %</td>
+              <td class="num">{{ km(c.hectares) }}</td>
+              <td class="num fort">{{ nb(c.pourcentage) }} %</td>
             </tr>
             {% endfor %}
           </table>
           <div class="telechargements">
-            <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom=nom ~ '.tif') }}">GeoTIFF</a>
-            {% if nom == "productivite" %}<a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='ndvi_pente.tif') }}">Pente du NDVI</a>{% endif %}
+            <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom=nom ~ '.tif') }}">Télécharger (GeoTIFF)</a>
           </div>
         </div>
         {% endfor %}
-        <p class="note">Les pixels stables ne sont pas colorés sur la carte.</p>
+        <p class="note">Sur la carte, les zones sans changement ne sont pas colorées.</p>
       </div>
     </div>
   </div>
 </section>
 
-{# ---------------- 3. Productivité ---------------- #}
+{# ================= 3. La végétation ================= #}
 {% if resume.ndvi %}
+{% set m = resume.ndvi.medianes %}
 <section class="panneau" style="margin-top:20px">
-  <header><h2>Productivité : NDVI médian de la terre ferme</h2>
-    <p>Mesuré directement sur les images, indépendamment du modèle · Mann-Kendall ({{ resume.ndvi.methode }}),
-      p {{ valeur_p(resume.ndvi.p) }} · pente de Sen
-      {{ "%+.4f" | format(resume.ndvi.pente_par_an) | replace(".", ",") }} par an</p></header>
-  <div class="corps"><div class="boite-graphique petite"><canvas id="graphique-ndvi"></canvas></div></div>
+  <header><h2>La végétation augmente-t-elle ou diminue-t-elle ?</h2>
+    <p>Le NDVI mesure la quantité de végétation verte vue par le satellite : proche de 0 pour un sol nu,
+      autour de 0,2 pour une végétation éparse, au-delà de 0,6 pour une végétation dense.</p></header>
+  <div class="corps">
+    <p class="lecture">Hors du lac, le NDVI médian passe de <b>{{ nb(m[0], 3) }}</b> en {{ a0 }}
+      à <b>{{ nb(m[-1], 3) }}</b> en {{ a1 }}.
+      {% if ndvi_hausse %}La hausse est régulière : le test statistique la confirme.
+      {% elif ndvi_baisse %}La baisse est régulière : le test statistique la confirme.
+      {% else %}Le test statistique ne montre pas d'évolution régulière.{% endif %}</p>
+    <div class="boite-graphique petite"><canvas id="graphique-ndvi"></canvas></div>
+  </div>
 </section>
 {% endif %}
 
-{# ---------------- 4. Surfaces ---------------- #}
+{# ================= 4. Les surfaces ================= #}
 <section class="panneau" style="margin-top:20px">
-  <header class="avec-reglage"><div><h2>Surface de chaque classe au fil des dates</h2>
-    <p id="legende-surfaces">Toute la zone : pixels classés aux {{ resume.nb_dates }} dates, {{ ha(resume.hectares_communs) }} ha
-      ({{ nb(resume.part_commune) }} % de la zone)</p></div>
+  <header class="avec-reglage"><div><h2>Comment ont évolué les surfaces ?</h2>
+    <p id="legende-surfaces">Hors du lac : pixels jamais classés « eau », pour que le niveau du lac ne masque pas le reste.</p></div>
     <div class="onglets compact" id="choix-surface">
-      <button type="button" data-vue="zone" class="actif">Toute la zone</button>
-      <button type="button" data-vue="terre">Terre ferme</button>
+      <button type="button" data-vue="terre" class="actif">Hors du lac</button>
+      <button type="button" data-vue="zone">Avec le lac</button>
     </div>
   </header>
   <div class="corps">
     <div class="boite-graphique"><canvas id="graphique"></canvas></div>
-    <div class="defile" data-vue-bloc="zone">{{ table_surfaces(resume.serie, 0) }}</div>
-    <div class="defile d-none" data-vue-bloc="terre">{{ table_surfaces(resume.serie_terre, 1) }}</div>
-  </div>
-</section>
-
-{# ---------------- 5. Tendances ---------------- #}
-<section class="panneau" style="margin-top:20px">
-  <header><h2>Tendance par classe</h2>
-    <p>Test de Mann-Kendall et pente de Sen · tendance retenue si p &lt; {{ resume.niveau_signification }} ·
-      « Terres nues » regroupe sol nu et sable/dune, les deux classes que le modèle confond le plus</p></header>
-  <div class="corps defile">
-    <h3 class="sous-titre">Toute la zone</h3>
-    {{ table_tendances(resume.tendances, couleurs) }}
-    <h3 class="sous-titre">Terre ferme (pixels jamais classés en eau : {{ ha(resume.hectares_terre) }} ha)</h3>
-    {{ table_tendances(resume.tendances_terre, couleurs) }}
-  </div>
-</section>
-
-{# ---------------- 6. Matrice ---------------- #}
-<section class="panneau" style="margin-top:20px">
-  <header><h2>Matrice de transition</h2>
-    <p>Hectares · lignes : classe au début · colonnes : classe à la fin</p></header>
-  <div class="corps defile">
-    <table class="donnees serie">
-      <thead><tr><th>Début \ Fin</th>{% for nom, couleur in classes_modele %}<th class="num">{{ nom }}</th>{% endfor %}</tr></thead>
-      <tbody>
-      {% for (nom, couleur), ligne in classes_modele | zip(resume.transitions) %}
-        {% set i = loop.index0 %}
-        <tr><td><i class="pastille" style="background:{{ couleur }}"></i> {{ nom }}</td>
-          {% for v in ligne %}<td class="num{{ ' diagonale' if loop.index0 == i }}">{{ ha(v) }}</td>{% endfor %}</tr>
-      {% endfor %}
-      </tbody>
-    </table>
-    <div class="telechargements">
-      <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='serie.csv') }}">Séries (CSV)</a>
-      <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='transitions.csv') }}">Transitions (CSV)</a>
+    <div data-vue-bloc="terre">
+      <table class="donnees serie simple">
+        <thead><tr><th>Type de surface</th><th class="num">{{ a0 }}</th><th class="num">{{ a1 }}</th>
+          <th class="num">Différence</th><th>Tendance sur {{ resume.nb_dates }} images</th></tr></thead>
+        <tbody>
+        {% for t in resume.tendances_terre if t %}
+          {% set c = resume.classes.index(t.classe) %}
+          <tr{% if c >= 5 %} class="ligne-fusion"{% endif %}>
+            <td><i class="pastille" style="background:{{ couleurs[c] }}"></i> {{ t.classe }}</td>
+            <td class="num">{{ km(resume.serie_terre[0].hectares[c]) }}</td>
+            <td class="num">{{ km(resume.serie_terre[-1].hectares[c]) }}</td>
+            <td class="num">{{ skm(t.variation_ha) }}</td>
+            <td>{{ mot_tendance(t) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
     </div>
+    <div class="d-none" data-vue-bloc="zone">
+      <table class="donnees serie simple">
+        <thead><tr><th>Type de surface</th><th class="num">{{ a0 }}</th><th class="num">{{ a1 }}</th>
+          <th class="num">Différence</th><th>Tendance sur {{ resume.nb_dates }} images</th></tr></thead>
+        <tbody>
+        {% for t in resume.tendances %}
+          {% set c = loop.index0 %}
+          <tr{% if c >= 5 %} class="ligne-fusion"{% endif %}>
+            <td><i class="pastille" style="background:{{ couleurs[c] }}"></i> {{ t.classe }}</td>
+            <td class="num">{{ km(resume.serie[0].hectares[c]) }}</td>
+            <td class="num">{{ km(resume.serie[-1].hectares[c]) }}</td>
+            <td class="num">{{ skm(t.variation_ha) }}</td>
+            <td>{{ mot_tendance(t) }}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="note">« Augmente » ou « diminue » : la surface évolue régulièrement dans le même sens, ce que confirme
+      un test statistique (moins de 5 % de risque que ce soit dû au hasard). « Terres nues » regroupe sol nu et
+      sable/dune, et « Végétation » regroupe végétation dense et clairsemée : ce sont les regroupements utilisés par
+      la règle de détection, plus fiables que chaque classe séparément.</p>
   </div>
 </section>
 
-{# ---------------- 7. Méthode ---------------- #}
+{# ================= 5. Comment lire / limites ================= #}
 <section class="panneau" style="margin-top:20px">
-  <header><h2>Méthode et limites</h2></header>
+  <header><h2>Comment le système a obtenu ce résultat</h2></header>
   <div class="corps methode">
     <ol>
-      <li><b>Occupation du sol.</b> Chaque date est classée par le U-Net. L'état de début et l'état de fin sont
-        {% if resume.periode_debut | length > 1 %}la classe majoritaire de {{ resume.periode_debut | length }} dates{% else %}la première et la dernière date{% endif %}.
-        Une dégradation est un passage vers une classe de moindre couverture végétale
-        (végétation saine → végétation clairsemée → sol nu → sable/dune) : c'est une règle du projet.</li>
-      <li><b>Productivité.</b> Tendance du NDVI de chaque pixel : test de Mann-Kendall (loi exacte,
-        |S| ≥ {{ resume.seuil_s_pixel }} pour {{ resume.nb_dates }} dates) et pente de Sen. Le NDVI est mesuré
-        directement sur les images ; il ne dépend pas des erreurs du modèle.</li>
-      <li><b>Synthèse.</b> Règle « un dehors, tous dehors » de l'indicateur ODD 15.3.1 (UNCCD) : un pixel est dégradé
-        si au moins un indicateur le dit. Le troisième sous-indicateur de l'UNCCD, le carbone organique du sol,
-        n'est pas mesurable avec Sentinel-2.</li>
-      <li><b>Évolution progressive.</b> Test de Mann-Kendall sur le rang de couverture végétale de chaque pixel,
-        date après date : il distingue une perte qui se confirme d'année en année d'un changement isolé.</li>
-      <li><b>Terre ferme.</b> Les pixels classés en eau à au moins une date sont exclus des indicateurs, car le
-        niveau du lac varie d'une année à l'autre.</li>
-      <li><b>Limites.</b> Les classes viennent de masques automatiques, sans vérité terrain ; l'exactitude mesurée
-        du modèle est de 0,765 (0,850 en regroupant sol nu et sable). Le modèle a été entraîné sur 2017–2023 :
-        il est probablement plus juste sur ces années. Une seule saison est observée, et la pluie de chaque année
-        n'est pas prise en compte.</li>
+      <li><b>Il classe chaque image.</b> Le modèle U-Net range chaque pixel de 10 m dans une des cinq classes :
+        eau, végétation dense, végétation clairsemée, sol nu, sable/dune.</li>
+      <li><b>Il résume chaque période.</b> Pour les 3 premières et les 3 dernières images, chaque pixel reçoit
+        l'état qu'il a au moins 2 fois sur 3 : eau, végétation ou surface nue. Cela écarte les erreurs isolées.</li>
+      <li><b>Il compare les deux périodes.</b> Un pixel passé de végétation à surface nue est une perte candidate ;
+        l'inverse est un gain. Les changements liés au lac sont mis à part.</li>
+      <li><b>Il vérifie avec une deuxième mesure.</b> Le NDVI, calculé directement à partir des images, doit baisser
+        de plus de 0,10 entre les deux périodes. Il ne dépend pas du modèle.</li>
+      <li><b>Il écarte les petites taches.</b> Seules les taches d'au moins 0,5 ha (50 pixels) sont retenues,
+        pour ne pas compter le bruit de classement.</li>
     </ol>
+    <h3 class="sous-titre">Ce qu'il faut garder en tête</h3>
+    <ul>
+      <li>Le modèle n'est pas parfait : il s'accorde avec les masques de référence dans environ 3 cas sur 4
+        (exactitude 0,765). Une partie des changements affichés peut être une erreur de classement.</li>
+      <li>Les masques de référence ont été produits automatiquement : il n'y a pas eu de vérification sur le terrain.</li>
+      <li>Les images doivent être de la même saison ; la pluie de chaque année n'est pas prise en compte.</li>
+      <li>Le modèle a été entraîné et évalué autour de Bol ({{ emprise_modele | join(", ") }}) : ailleurs, le résultat est indicatif.</li>
+    </ul>
+
+    <details class="details-techniques">
+      <summary>Détails techniques (pour le mémoire)</summary>
+      <ol>
+        <li><b>Changement d'état.</b> État dominant (au moins {% if resume.periode_debut | length > 1 %}2 dates sur
+          {{ resume.periode_debut | length }}{% else %}1 date sur 1{% endif %}) : eau (classe 0), végétation (classes 1 + 2),
+          surface nue (classes 3 + 4) ; périodes {{ resume.periode_debut | join(", ") }} / {{ resume.periode_fin | join(", ") }}.
+          {% if resume.detail %}Pertes candidates : {{ km(resume.detail.pertes_candidates_ha) }} ; eau stable :
+          {{ km(resume.detail.eau_stable_ha) }} ; végétation stable : {{ km(resume.detail.vegetation_stable_ha) }} ;
+          surface nue persistante : {{ km(resume.detail.surface_nue_persistante_ha) }}.{% endif %}</li>
+        <li><b>Confirmation.</b> Baisse du NDVI moyen de période &gt; 0,10 ; taches d'au moins 50 pixels (0,5 ha,
+          4-connexité). Règle identique au notebook v8 du mémoire.</li>
+        <li><b>Productivité (complément).</b> Tendance du NDVI par pixel : test de Mann-Kendall (loi exacte, |S| ≥ {{ resume.seuil_s_pixel }}
+          pour {{ resume.nb_dates }} dates) et pente de Sen.
+          {% if resume.ndvi %}NDVI médian : Mann-Kendall ({{ resume.ndvi.methode }}), p = {{ nb(resume.ndvi.p, 3) }}, pente de Sen
+          {{ "%+.4f" | format(resume.ndvi.pente_par_an) | replace(".", ",") }} par an.{% endif %}</li>
+        <li><b>Évolution progressive.</b> Mann-Kendall sur le rang de couverture de chaque pixel (approximation normale
+          avec correction des ex æquo).{% if resume.persistance is not none %} {{ nb(resume.persistance) }} % des pertes
+          candidates sont aussi progressives.{% endif %}</li>
+        <li><b>Seuil.</b> Niveau de signification 0,05 pour tous les tests. Exactitude du modèle sur le test 2025–2026 :
+          0,765 (0,850 en regroupant sol nu et sable). Modèle entraîné sur 2017–2023.</li>
+      </ol>
+      <h3 class="sous-titre">Tendances détaillées (hors du lac)</h3>
+      <div class="defile">
+      <table class="donnees serie">
+        <thead><tr><th>Classe</th><th class="num">Pente de Sen</th><th class="num">Tau</th><th class="num">p</th></tr></thead>
+        <tbody>
+        {% for t in resume.tendances_terre if t %}
+          <tr><td>{{ t.classe }}</td>
+            <td class="num">{% if t.pente_ha_par_an is not none %}{{ nb(t.pente_ha_par_an, 0) }} ha/an{% else %}—{% endif %}</td>
+            <td class="num">{% if t.tau is not none %}{{ nb(t.tau, 2) }}{% else %}—{% endif %}</td>
+            <td class="num">{% if t.p is none %}—{% elif t.p < 0.001 %}&lt; 0,001{% else %}{{ nb(t.p, 3) }}{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% if resume.qualite %}
+      <h3 class="sous-titre">Contrôle de qualité des images</h3>
+      <p class="note">Images étalées sur {{ resume.qualite.ecart_jours }} jours dans la saison (seuil : {{ resume.qualite.seuils.ecart_jours_max }}).</p>
+      <div class="defile">
+      <table class="donnees serie">
+        <thead><tr><th>Date</th><th class="num">Non classé</th><th class="num">NDVI médian</th><th>État</th></tr></thead>
+        <tbody>
+        {% for q in resume.qualite.par_date %}
+          <tr><td>{{ q.date }}</td><td class="num">{{ nb(q.part_non_classee) }} %</td>
+            <td class="num">{% if q.ndvi_median is not none %}{{ nb(q.ndvi_median, 3) }}{% else %}—{% endif %}</td>
+            <td>{% if q.atypique %}atypique{% elif q.nuageuse %}nuageuse{% else %}normale{% endif %}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      {% endif %}
+      <h3 class="sous-titre">Matrice de transition (hectares · lignes : début · colonnes : fin)</h3>
+      <div class="defile">
+      <table class="donnees serie">
+        <thead><tr><th>Début \ Fin</th>{% for nom, couleur in classes_modele %}<th class="num">{{ nom }}</th>{% endfor %}</tr></thead>
+        <tbody>
+        {% for (nom, couleur), ligne in classes_modele | zip(resume.transitions) %}
+          {% set i = loop.index0 %}
+          <tr><td>{{ nom }}</td>
+            {% for v in ligne %}<td class="num{{ ' diagonale' if loop.index0 == i }}">{{ "{:,}".format(v | round | int) | replace(",", " ") }}</td>{% endfor %}</tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+      <div class="telechargements">
+        <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='serie.csv') }}">Séries (CSV)</a>
+        <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='transitions.csv') }}">Transitions (CSV)</a>
+        <a class="btn btn-secondaire" href="{{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='ndvi_pente.tif') }}">Pente du NDVI (GeoTIFF)</a>
+      </div>
+    </details>
   </div>
 </section>
 {% endif %}
@@ -259,23 +334,26 @@
 {% if suivi['statut'] in ('en_attente', 'en_cours') %}
 <script src="{{ url_for('static', filename='js/suivi.js') }}"></script>
 <script>suivreAnalyse({{ url_for('suivi.etat', suivi_id=suivi['id']) | tojson }});</script>
-{% elif suivi['statut'] == 'terminee' and resume.get('version') == 2 %}
+{% elif suivi['statut'] == 'terminee' and resume.get('version') == version_methode %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script>
 (function () {
   const resume = {{ resume | tojson }};
-  const couleurs = {{ classes_modele | map(attribute=1) | list | tojson }}.concat(["#b98b4e"]);
+  const couleurs = {{ classes_modele | map(attribute=1) | list | tojson }}.concat(["#b98b4e", "#2e7d32"]);
   const urlCarte = {{ url_for('suivi.fichier', suivi_id=suivi['id'], nom='__NOM__.png') | tojson }};
+  const annees = resume.dates.map(function (d) { return d.slice(0, 4); });
 
   function onglets(idGroupe, attribut, rappel) {
     const boutons = document.querySelectorAll("#" + idGroupe + " button");
     boutons.forEach(function (b) {
       b.addEventListener("click", function () {
         boutons.forEach(function (x) { x.classList.toggle("actif", x === b); });
-        rappel(b.getAttribute(attribut));
+        rappel(b.getAttribute(attribut), b);
       });
     });
   }
+  const km = function (ha) { return ha / 100; };
+  const fr = function (v, d) { return v.toLocaleString("fr-FR", { maximumFractionDigits: d }); };
 
   // --- Graphiques ---
   let graphique = null;
@@ -285,7 +363,7 @@
   function axes(titre) {
     return { x: { ticks: { color: texte }, grid: { color: ligne } },
              y: { title: { display: true, text: titre, color: texte }, ticks: { color: texte },
-                  grid: { color: ligne } } };
+                  grid: { color: ligne }, beginAtZero: true } };
   }
   function tracerSurfaces(vue) {
     if (typeof Chart === "undefined") { return; }
@@ -294,17 +372,18 @@
     const jeux = [];
     resume.classes.forEach(function (nom, c) {
       if (c < debut) { return; }
-      const fusion = c === resume.classes.length - 1;
-      jeux.push({ label: nom, data: lignes.map(function (s) { return s.hectares[c]; }),
+      const fusion = c >= 5;
+      jeux.push({ label: nom, data: lignes.map(function (s) { return km(s.hectares[c]); }),
                   borderColor: couleurs[c], backgroundColor: couleurs[c], borderWidth: 2,
-                  borderDash: fusion ? [6, 4] : [], pointRadius: 4, tension: 0 });
+                  borderDash: fusion ? [6, 4] : [], pointRadius: 3, tension: 0 });
     });
     if (graphique) { graphique.destroy(); }
     graphique = new Chart(document.getElementById("graphique"), {
-      type: "line", data: { labels: resume.dates, datasets: jeux },
+      type: "line", data: { labels: annees, datasets: jeux },
       options: { maintainAspectRatio: false, interaction: { mode: "index", intersect: false },
-                 plugins: { legend: { labels: { color: texte, usePointStyle: true } } },
-                 scales: axes("Surface (ha)") } });
+                 plugins: { legend: { labels: { color: texte, usePointStyle: true } },
+                            tooltip: { callbacks: { label: function (c) { return c.dataset.label + " : " + fr(c.parsed.y, 0) + " km²"; } } } },
+                 scales: axes("Surface (km²)") } });
   }
   if (typeof Chart === "undefined") {
     document.querySelectorAll(".boite-graphique").forEach(function (b) {
@@ -312,20 +391,20 @@
       b.innerHTML = "<p class='note'>Graphique indisponible sans connexion Internet : les valeurs sont dans les tableaux.</p>";
     });
   } else {
-    tracerSurfaces("zone");
+    tracerSurfaces("terre");
     if (resume.ndvi) {
+      const opts = axes("NDVI"); opts.y.beginAtZero = false;
       new Chart(document.getElementById("graphique-ndvi"), {
         type: "line",
-        data: { labels: resume.dates, datasets: [{ label: "NDVI médian (terre ferme)",
+        data: { labels: annees, datasets: [{ label: "NDVI médian hors du lac",
                 data: resume.ndvi.medianes, borderColor: "#1c8457", backgroundColor: "#1c8457",
                 borderWidth: 2, pointRadius: 4, tension: 0 }] },
-        options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
-                   scales: axes("NDVI") } });
+        options: { maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: opts } });
     }
   }
   const legendes = {
-    zone: {{ ("Toute la zone : pixels classés aux " ~ resume.nb_dates ~ " dates, " ~ ha(resume.hectares_communs) ~ " ha") | tojson }},
-    terre: {{ ("Terre ferme : pixels jamais classés en eau, " ~ ha(resume.hectares_terre) ~ " ha") | tojson }}
+    terre: "Hors du lac : pixels jamais classés « eau », pour que le niveau du lac ne masque pas le reste.",
+    zone: "Avec le lac : toute la zone, y compris les surfaces en eau."
   };
   onglets("choix-surface", "data-vue", function (vue) {
     document.querySelectorAll("[data-vue-bloc]").forEach(function (d) {
@@ -338,15 +417,16 @@
   // --- Carte ---
   const boite = document.getElementById("carte");
   const premier = document.querySelector("#choix-carte button");
-  function montrerBilan(nom) {
+  function montrer(nom, bouton) {
     document.querySelectorAll("[data-bilan]").forEach(function (d) {
       d.classList.toggle("d-none", d.getAttribute("data-bilan") !== nom);
     });
+    document.getElementById("explication-carte").textContent = bouton.getAttribute("data-explication");
   }
   if (typeof L === "undefined" || !premier) {
     boite.classList.add("carte-indisponible");
     boite.innerHTML = "<p>Carte indisponible : connexion Internet requise pour le fond satellite.</p>";
-    onglets("choix-carte", "data-carte", montrerBilan);
+    onglets("choix-carte", "data-carte", montrer);
     return;
   }
   const e = resume.emprise_wgs84;
@@ -358,9 +438,9 @@
                                 bornes, { opacity: 0.9 }).addTo(carte);
   L.rectangle(bornes, { color: "#ffffff", weight: 1, fill: false, interactive: false }).addTo(carte);
   carte.fitBounds(bornes);
-  onglets("choix-carte", "data-carte", function (nom) {
+  onglets("choix-carte", "data-carte", function (nom, bouton) {
     couche.setUrl(urlCarte.replace("__NOM__", nom));
-    montrerBilan(nom);
+    montrer(nom, bouton);
   });
   document.getElementById("opacite").addEventListener("input", function () {
     couche.setOpacity(this.value / 100);

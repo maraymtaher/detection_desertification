@@ -1,0 +1,87 @@
+DeepDesert - mise à jour : méthode de détection version 3 (règle du mémoire)
+=============================================================================
+
+CE QUI CHANGE
+-------------
+La détection du suivi temporel applique maintenant exactement la règle du
+mémoire (notebooks v7/v8), quelle que soit la zone choisie :
+
+  1. État dominant de chaque pixel sur les 3 premières et les 3 dernières
+     images : eau, végétation (saine + clairsemée) ou surface nue
+     (sol nu + sable/dune), retenu s'il apparaît au moins 2 fois sur 3.
+     (Moins de 6 images : première image contre dernière.)
+  2. Végétation devenue surface nue = perte candidate ;
+     surface nue devenue végétation = gain ; eau dans une seule période =
+     changement lié au lac (ni perte ni gain).
+  3. Perte CONFIRMÉE = perte candidate + baisse du NDVI moyen > 0,10,
+     en taches d'au moins 0,5 ha (50 pixels). Gains retenus à partir de 0,5 ha.
+
+Nouveau : chaque résultat indique son DOMAINE DE VALIDITÉ :
+  - « validé »      : toute la zone est dans la zone d'entraînement du modèle ;
+  - « partiel »     : une partie seulement (le reste est indicatif) ;
+  - « indicatif »   : zone hors entraînement (le modèle n'y a pas été évalué).
+
+Ce qui est retiré : la règle UNCCD « un dehors, tous dehors » et la limitation
+à la « terre ferme » pour la carte de synthèse.
+
+INSTALLATION
+------------
+1. Faites une copie de sauvegarde de votre dossier deepdesert.
+2. Arrêtez l'application (Ctrl+C dans la fenêtre où tourne run.py).
+3. Copiez le contenu de ce zip DANS votre dossier deepdesert en acceptant
+   de remplacer les fichiers. Vos données (donnees/, modeles/, .env) ne
+   sont pas touchées.
+4. Vérifiez que scipy est installé :  pip install scipy
+5. Vérifiez la règle :  python -m tests.test_regle_memoire
+   (doit afficher « Tous les tests de la règle sont réussis. »)
+6. Relancez :  python run.py
+
+ANCIENS SUIVIS
+--------------
+Les suivis déjà calculés (méthode version 2) affichent « ancienne méthode ».
+Ouvrez le suivi, cliquez sur « Recalculer », puis, dans « Zones à
+surveiller », relancez le calcul des zones. Le NDVI déjà calculé de chaque
+image est réutilisé : le recalcul est plus rapide que le premier calcul.
+
+=============================================================================
+AJOUTS : CONTRÔLE DE QUALITÉ ET VALIDATION PAR POINTS
+=============================================================================
+
+1. CONTRÔLE DE QUALITÉ DES IMAGES (automatique)
+-----------------------------------------------
+À chaque calcul de suivi, l'application vérifie :
+  - l'écart de dates dans la saison (avertissement au-delà de 30 jours) ;
+  - la part de pixels non classés de chaque image (au-delà de 20 %) ;
+  - les images atypiques (NDVI médian très différent des autres dates).
+Les avertissements s'affichent en haut de la page du suivi et dans le PDF ;
+le détail par date est dans « Détails techniques ».
+
+2. VALIDATION PAR POINTS (contrôle visuel en aveugle)
+-----------------------------------------------------
+But : mesurer la VRAIE précision des pertes détectées, au lieu de
+l'accord avec les pseudo-masques.
+
+Étape A - tirer les points (le suivi doit être recalculé en version 3) :
+    python scripts/validation_tirage.py --suivi 4
+  (remplacez 4 par le numéro de votre suivi ; 20 points par catégorie,
+   soit 80 points ; durée : quelques minutes)
+  Fichiers créés dans donnees/validation/suivi_4/
+
+Étape B - contrôler les points :
+  - ouvrez carnet.html dans Chrome ou Edge ;
+  - pour chaque point, indiquez ce qui domine sous la croix rouge pendant
+    la période de référence et la période récente ;
+  - en cas de doute, ouvrez points.kml dans Google Earth Pro (images
+    d'archive) ; répondez « illisible » plutôt que de deviner ;
+  - les réponses sont gardées dans le navigateur : vous pouvez faire une pause ;
+  - à la fin, cliquez « Exporter reponses.csv » et placez le fichier dans
+    donnees/validation/suivi_4/
+  NE PAS OUVRIR cle_NE_PAS_OUVRIR.csv avant d'avoir fini.
+
+Étape C - calculer les résultats :
+    python scripts/validation_resultats.py --suivi 4
+  Résultats : resultats_validation.md et resultats_validation.csv
+  (précision par catégorie avec intervalle de confiance de Wilson, surface
+   de pertes réelles estimée selon Olofsson et al., 2014).
+
+Tests : python -m tests.test_regle_memoire  (8 tests)

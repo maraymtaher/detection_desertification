@@ -16,6 +16,28 @@
 {% elif nom == "calendrier" %}<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/>
 {% elif nom == "modele" %}<path d="M4 5v6a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V5"/><path d="M12 14v5"/><path d="M8 19h8"/>
 {% elif nom == "historique" %}<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 8v4l3 2"/>
+{% elif nom == "qualite" %}<path d="M12 3 4 6v6c0 4.5 3.4 8.2 8 9 4.6-.8 8-4.5 8-9V6l-8-3Z"/><path d="m8.5 12 2.5 2.5 4.5-5"/>
+{% elif nom == "rapport" %}<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8l-5-5Z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/>
+{% elif nom == "feuille" %}<path d="M5 19c0-8 5-14 15-15-1 10-7 15-15 15Z"/><path d="M5 19 13 11"/>
+{% elif nom == "repere" %}<path d="M12 21s7-6.2 7-11.5A7 7 0 0 0 5 9.5C5 14.8 12 21 12 21Z"/><circle cx="12" cy="9.5" r="2.5"/>
+{% elif nom == "cloche" %}<path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15L6 16Z"/><path d="M10 20a2 2 0 0 0 4 0"/>
+{% elif nom == "utilisateur" %}<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>
+{% elif nom == "lecture" %}<path d="M8 5v14l11-7L8 5Z"/>
+{% elif nom == "info" %}<circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7.5v.5"/>
+{% elif nom == "menu" %}<path d="M4 6h16"/><path d="M4 12h16"/><path d="M4 18h16"/>
+{% elif nom == "courbe" %}<path d="M4 20V4"/><path d="M4 20h16"/><path d="m7 15 4-5 3 3 5-6"/>
+{% elif nom == "horloge" %}<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{% elif nom == "reglages" %}<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/>
+{% elif nom == "cible" %}<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>
+{% elif nom == "loupe" %}<circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/>
+{% elif nom == "filtre" %}<path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z"/>
+{% elif nom == "reseau" %}<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+{% elif nom == "oeil" %}<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>
+{% elif nom == "telecharger" %}<path d="M12 4v11m0 0-4-4m4 4 4-4"/><path d="M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2"/>
+{% elif nom == "regle" %}<path d="M3 17 17 3l4 4L7 21l-4-4Z"/><path d="m7 13 2 2M10 10l2 2M13 7l2 2"/>
+{% elif nom == "couches" %}<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/>
+{% elif nom == "courriel" %}<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>
+{% elif nom == "cadenas" %}<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
 {% elif nom == "soleil" %}<circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8"/>
 {% elif nom == "lune" %}<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5Z"/>
 {% endif %}
@@ -25,7 +47,7 @@
 {# Sélecteur de thème, utilisable sur toutes les pages #}
 {% macro choix_theme() %}
 <div class="choix-theme" role="group" aria-label="Thème de l'interface">
-  <button type="button" data-choix-theme="clair" onclick="choisirTheme('clair')">{{ ico("soleil") }} Clair</button>
-  <button type="button" data-choix-theme="sombre" onclick="choisirTheme('sombre')">{{ ico("lune") }} Sombre</button>
+  <button type="button" data-choix-theme="clair" onclick="choisirTheme('clair')" title="Thème clair">{{ ico("soleil") }}<span class="texte-menu"> Clair</span></button>
+  <button type="button" data-choix-theme="sombre" onclick="choisirTheme('sombre')" title="Thème sombre">{{ ico("lune") }}<span class="texte-menu"> Sombre</span></button>
 </div>
 {% endmacro %}

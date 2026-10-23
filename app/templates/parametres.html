@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico, choix_theme %}
+{% block titre %}Paramètres{% endblock %}
+{% block entete %}Paramètres{% endblock %}
+{% block soustitre %}Compte, affichage et réglages du système. Les paramètres scientifiques sont verrouillés.{% endblock %}
+{% block contenu %}
+<div class="grille-centre" style="margin-top:0">
+  <section class="panneau">
+    <header><h2>Mon compte</h2><p>{{ g.utilisateur['email'] }}</p></header>
+    <div class="corps">
+      <form method="post" class="formulaire-ligne">
+        <input type="hidden" name="jeton" value="{{ jeton() }}"><input type="hidden" name="action" value="nom">
+        <div class="champ"><label for="nom">Nom affiché</label>
+          <input id="nom" name="nom" value="{{ g.utilisateur['nom'] }}" maxlength="80" required></div>
+        <button class="btn btn-secondaire">Enregistrer</button>
+      </form>
+      <h3 class="sous-titre">Changer le mot de passe</h3>
+      <form method="post">
+        <input type="hidden" name="jeton" value="{{ jeton() }}"><input type="hidden" name="action" value="mot_de_passe">
+        <div class="champ"><label for="actuel">Mot de passe actuel</label>
+          <input id="actuel" name="actuel" type="password" autocomplete="current-password" required></div>
+        <div class="champ"><label for="nouveau">Nouveau mot de passe</label>
+          <input id="nouveau" name="nouveau" type="password" autocomplete="new-password"
+                 minlength="{{ config.LONGUEUR_MIN_MOT_DE_PASSE }}" required>
+          <small>{{ config.LONGUEUR_MIN_MOT_DE_PASSE }} caractères au moins</small></div>
+        <div class="champ"><label for="confirmation">Confirmation</label>
+          <input id="confirmation" name="confirmation" type="password" autocomplete="new-password" required></div>
+        <button class="btn btn-principal">Modifier le mot de passe</button>
+      </form>
+    </div>
+  </section>
+
+  <div style="display:grid; gap:20px; align-content:start">
+    <section class="panneau">
+      <header><h2>Affichage</h2><p>Gardé sur cet ordinateur</p></header>
+      <div class="corps">
+        <div class="ligne-reglage"><span>Thème</span>{{ choix_theme() }}</div>
+        <div class="ligne-reglage"><span>Menu latéral</span>
+          <button type="button" class="btn btn-secondaire petit" onclick="basculerMenu()">{{ ico("menu") }} Réduire / agrandir</button></div>
+      </div>
+    </section>
+    <section class="panneau">
+      <header><h2>Système</h2><p>Valeurs lues dans config.py</p></header>
+      <dl class="mesures compact corps">
+        <div><dt>Nom du système</dt><dd>{{ nom_systeme }} v{{ version_systeme }}</dd></div>
+        <div><dt>Surface maximale par analyse</dt><dd>{{ config.SURFACE_MAX_KM2 | fr(0) }} km²</dd></div>
+        <div><dt>Taille maximale d'une archive</dt><dd>{{ taille_envoi_mo | fr(0) }} Mo</dd></div>
+        {% for nom, chemin in dossiers.items() %}<div><dt>{{ nom }}</dt><dd class="mono chemin">{{ chemin }}</dd></div>{% endfor %}
+      </dl>
+    </section>
+  </div>
+</div>
+
+<section class="panneau" style="margin-top:20px">
+  <header class="avec-reglage"><div><h2>Paramètres scientifiques du modèle</h2>
+    <p>Identiques à ceux de l'entraînement. Les modifier rendrait les résultats du U-Net invalides :
+      ils ne sont modifiables que dans <span class="mono">moteur/config_modele.py</span>, avec un nouveau modèle.</p></div>
+    <span class="puce neutre"><i></i>Verrouillés</span></header>
+  <div class="corps">
+    <div class="grille-centre" style="margin-top:0">
+      <div>
+        <h3 class="sous-titre">Modèle</h3>
+        <dl class="mesures compact">
+          <div><dt>Architecture</dt><dd>U-Net (Keras)</dd></div>
+          <div><dt>Fichier</dt><dd class="mono">{{ modele.fichier if modele else cm.CHEMIN_MODELE }}</dd></div>
+          <div><dt>Empreinte SHA-256</dt><dd class="mono chemin">{{ modele.sha256 if modele else 'fichier introuvable' }}</dd></div>
+          <div><dt>Entrée</dt><dd>{{ cm.TAILLE_FENETRE }} × {{ cm.TAILLE_FENETRE }} pixels × {{ cm.NB_CANAUX }} canaux</dd></div>
+          <div><dt>Résolution</dt><dd>{{ cm.RESOLUTION }} m (bandes à 20 m rééchantillonnées en bilinéaire)</dd></div>
+          <div><dt>Normalisation</dt><dd>(valeur + décalage ESA) / {{ cm.QUANTIFICATION | fr(0) }}, négatifs ramenés à 0</dd></div>
+          <div><dt>Recouvrement des fenêtres</dt><dd>32 pixels (seul le centre est gardé)</dd></div>
+        </dl>
+        <h3 class="sous-titre">Classes de sortie</h3>
+        <table class="donnees">
+          <tbody>{% for nom, couleur in classes_modele %}
+            <tr><td class="mono">{{ loop.index0 }}</td><td><i class="pastille" style="background:{{ couleur }}"></i> {{ nom }}</td><td class="mono">{{ couleur }}</td></tr>
+          {% endfor %}
+            <tr><td class="mono">{{ cm.NON_CLASSE }}</td><td>Non classé (nuage, ombre, donnée manquante)</td><td>—</td></tr></tbody>
+        </table>
+      </div>
+      <div>
+        <h3 class="sous-titre">Canaux d'entrée, dans l'ordre</h3>
+        <table class="donnees">
+          <thead><tr><th>N°</th><th>Canal</th><th>Résolution d'origine</th></tr></thead>
+          <tbody>
+          {% for nom, _, res in cm.BANDES_MODELE %}<tr><td class="mono">{{ loop.index }}</td><td>{{ nom }}</td><td>{{ res }} m</td></tr>{% endfor %}
+          {% for nom, formule, role in formules %}<tr><td class="mono">{{ cm.BANDES_MODELE | length + loop.index }}</td>
+            <td>{{ nom }} <small style="color:var(--attenue)">· {{ role }}</small><br><span class="mono">{{ formule }}</span></td><td>10 m</td></tr>{% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="grille-centre">
+      <div>
+        <h3 class="sous-titre">Pixels masqués (couche SCL de l'ESA)</h3>
+        <ul class="liste-simple">{% for code, nom in scl %}<li><span class="mono">{{ code }}</span> · {{ nom }}</li>{% endfor %}</ul>
+        <h3 class="sous-titre">Domaine de validité</h3>
+        <dl class="mesures compact">
+          <div><dt>Tuiles</dt><dd class="mono">{{ tuiles_modele | join(" · ") }}</dd></div>
+          <div><dt>Rectangle (O, S, E, N)</dt><dd class="mono">{{ emprise_modele | join(" ; ") }}</dd></div>
+        </dl>
+      </div>
+      <div>
+        <h3 class="sous-titre">Suivi temporel</h3>
+        <dl class="mesures compact">
+          <div><dt>Test de tendance</dt><dd>Mann-Kendall + pente de Sen</dd></div>
+          <div><dt>Seuil de signification</dt><dd>{{ serie.NIVEAU_SIGNIFICATION | fr(2) }}</dd></div>
+          <div><dt>Dates par période (début / fin)</dt><dd>{{ serie.TAILLE_PERIODE }} (si au moins {{ serie.MIN_DATES_PERIODES }} dates)</dd></div>
+          <div><dt>Dates minimales pour une tendance par pixel</dt><dd>{{ serie.MIN_DATES_TENDANCE }}</dd></div>
+          <div><dt>Règle de détection</dt><dd>mémoire (méthode v{{ version_methode }}) : état dominant 2 dates sur 3, perte végétation → surface nue</dd></div>
+          <div><dt>Confirmation d'une perte</dt><dd>baisse du NDVI moyen &gt; {{ serie.SEUIL_BAISSE_NDVI | fr(2) }}, taches ≥ {{ serie.TAILLE_MIN_PIXELS }} pixels (0,5 ha)</dd></div>
+          <div><dt>Zones à surveiller</dt><dd>carrés de 1 km, 12 au plus, non voisins</dd></div>
+        </dl>
+        <h3 class="sous-titre">Saisons reconnues</h3>
+        <ul class="liste-simple">{% for k, v in cm.LIBELLES_SAISONS.items() %}<li>{{ v }}</li>{% endfor %}</ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Formats d'export</h2></header>
+  <table class="donnees" style="margin-top:6px">
+    <tbody>{% for f, usage in exports %}<tr><td><b>{{ f }}</b></td><td>{{ usage }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endblock %}

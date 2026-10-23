@@ -10,7 +10,7 @@ from moteur.config_modele import EMPRISE_ENTRAINEMENT, LIBELLES_SAISONS, saison
 from moteur.inference import charger_modele, predire_zone
 from moteur.lecture_safe import lire_produit
 from moteur.pretraitement import LecteurProduit
-from moteur import resultats
+from moteur import resultats, tracabilite
 
 
 class ErreurAnalyse(Exception):
@@ -63,7 +63,7 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
              progression=None, etape=None):
     """
     Lance une analyse complète et écrit les résultats dans dossier_sortie :
-      classes.tif, carte.png, controle.png, statistiques.csv, resume.json
+      classes.tif, carte.png, rvb.jpg, controle.png, statistiques.csv, resume.json
 
     zone_pixels : (lig0, col0, lig1, col1), ou
     zone_wgs84  : (ouest, sud, est, nord) en degrés.
@@ -122,10 +122,20 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
         r["rgb"], carte, dossier / "controle.png",
         f"{produit.date}  tuile {produit.tuile}")
 
+    zone_finale = [int(r["origine"][0]), int(r["origine"][1]),
+                   int(r["origine"][0] + carte.shape[0]),
+                   int(r["origine"][1] + carte.shape[1])]
+    # Image en couleurs réelles pour la carte web (non bloquant)
+    try:
+        from moteur.apercu import ecrire_image_rvb
+        ecrire_image_rvb(chemin_zip, zone_finale, dossier / "rvb.jpg")
+    except Exception:
+        pass
+
     avertissements = list(produit.avertissements)
     if hors > 0:
         avertissements.append(
-            f"{hors} % de la zone se trouve hors de la zone d'entraînement "
+            f"{str(hors).replace('.', ',')} % de la zone se trouve hors de la zone d'entraînement "
             "du modèle : résultat non fiable sur cette partie.")
 
     resume = {
@@ -133,9 +143,7 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
         "date": produit.date,
         "tuile": produit.tuile,
         "saison": LIBELLES_SAISONS[saison(produit.date)],
-        "zone_pixels": [int(r["origine"][0]), int(r["origine"][1]),
-                        int(r["origine"][0] + carte.shape[0]),
-                        int(r["origine"][1] + carte.shape[1])],
+        "zone_pixels": zone_finale,
         "emprise_wgs84": [round(v, 6) for v in emprise],
         "surface_km2": round(carte.size * 100 / 1e6, 2),
         "part_hors_entrainement": hors,
@@ -143,6 +151,7 @@ def analyser(chemin_zip, dossier_sortie, zone_pixels=None, zone_wgs84=None,
         "statistiques_validite": stats_validite,
         "avertissements": avertissements,
         "duree_secondes": round(time.time() - debut, 1),
+        "tracabilite": tracabilite.trace_analyse(produit, zone_finale),
     }
     with open(dossier / "resume.json", "w", encoding="utf-8") as f:
         json.dump(resume, f, ensure_ascii=False, indent=2)

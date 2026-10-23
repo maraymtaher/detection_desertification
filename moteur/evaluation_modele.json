@@ -1,0 +1,186 @@
+{
+  "_note": "Chiffres recopiés des sorties enregistrées des notebooks. Ne pas modifier sans nouvelle évaluation.",
+  "source": "Notebook « améliorations v1 » (Colab), évaluation du fichier unet_meilleur_modele.keras",
+  "jeu_de_test": "Images 2025-2026 de l'emprise de Bol, jamais vues à l'entraînement : 1 750 fenêtres, 28 098 296 pixels à 10 m",
+  "reference": "Masques de référence produits automatiquement (pseudo-masques construits notamment à partir d'ESA WorldCover 2021 et d'indices spectraux), sans vérification de terrain",
+  "globales": [
+    {
+      "nom": "Exactitude globale",
+      "valeur": 0.765,
+      "explication": "Part des pixels dont la classe prédite est la même que celle du masque de référence."
+    },
+    {
+      "nom": "F1 moyen (macro)",
+      "valeur": 0.71,
+      "explication": "Moyenne, sur les 5 classes, de l'équilibre entre précision et rappel ; chaque classe compte autant."
+    },
+    {
+      "nom": "IoU moyen (macro)",
+      "valeur": 0.564,
+      "explication": "Recouvrement moyen entre zones prédites et zones de référence, classe par classe."
+    },
+    {
+      "nom": "Kappa de Cohen",
+      "valeur": 0.685,
+      "explication": "Accord corrigé de la part due au hasard (0 = hasard, 1 = accord parfait)."
+    }
+  ],
+  "regroupements": [
+    {
+      "nom": "Sol nu et sable fusionnés (4 classes)",
+      "exactitude": 0.85,
+      "kappa": 0.776
+    },
+    {
+      "nom": "Surface nue / non nue (2 classes)",
+      "exactitude": 0.949,
+      "kappa": 0.895,
+      "f1": 0.939
+    }
+  ],
+  "saisons": [
+    {
+      "nom": "Février",
+      "kappa": 0.674
+    },
+    {
+      "nom": "Mai",
+      "kappa": 0.671
+    },
+    {
+      "nom": "Septembre (une seule scène)",
+      "kappa": 0.674
+    }
+  ],
+  "comparaison_classique": {
+    "titre": "Classe « surface nue » : U-Net contre règle par indices",
+    "regle": "Surface nue si NDVI < 0,15 et NDWI <= 0 (méthode classique par seuils)",
+    "lignes": [
+      {
+        "methode": "Règle par indices (NDVI, NDWI)",
+        "f1": 0.775,
+        "rappel": 0.677
+      },
+      {
+        "methode": "U-Net",
+        "f1": 0.939,
+        "rappel": 0.964
+      }
+    ]
+  },
+  "limites": [
+    "Les scores mesurent l'accord avec des masques automatiques, pas avec le terrain.",
+    "Entraînement, validation et test portent sur la même emprise : la capacité à généraliser à d'autres régions n'est pas mesurée.",
+    "Le NDVI est à la fois une entrée du modèle et un élément de construction des masques.",
+    "Les classes « sol nu » et « sable/dune » sont souvent confondues ; elles sont additionnées (« terres nues ») dans le suivi temporel."
+  ],
+  "comparaison_modeles": {
+    "source": "Notebook « améliorations v5 » : mêmes images de test 2025-2026, mêmes masques de référence ; un seul entraînement par modèle (écarts de moins d'un point non significatifs)",
+    "lignes": [
+      {
+        "methode": "Règle NDVI/NDWI (méthode classique)",
+        "parametres": 0,
+        "exactitude": null,
+        "kappa": null,
+        "f1": null,
+        "iou": null,
+        "f1_nu": 0.775,
+        "ms": null
+      },
+      {
+        "methode": "Forêt aléatoire (pixel par pixel)",
+        "parametres": null,
+        "exactitude": 0.683,
+        "kappa": 0.584,
+        "f1": 0.623,
+        "iou": 0.473,
+        "f1_nu": 0.914,
+        "ms": null
+      },
+      {
+        "methode": "CNN simplifié",
+        "parametres": 137637,
+        "exactitude": 0.731,
+        "kappa": 0.642,
+        "f1": 0.667,
+        "iou": 0.521,
+        "f1_nu": 0.923,
+        "ms": 4.0
+      },
+      {
+        "methode": "SegNet simplifié",
+        "parametres": 7023813,
+        "exactitude": 0.755,
+        "kappa": 0.673,
+        "f1": 0.699,
+        "iou": 0.553,
+        "f1_nu": 0.927,
+        "ms": 6.8
+      },
+      {
+        "methode": "DeepLabV3+ léger",
+        "parametres": 13232453,
+        "exactitude": 0.767,
+        "kappa": 0.687,
+        "f1": 0.705,
+        "iou": 0.562,
+        "f1_nu": 0.938,
+        "ms": 12.3
+      },
+      {
+        "methode": "U-Net (modèle utilisé)",
+        "parametres": 7703941,
+        "exactitude": 0.765,
+        "kappa": 0.685,
+        "f1": 0.71,
+        "iou": 0.564,
+        "f1_nu": 0.939,
+        "ms": 6.6,
+        "retenu": true
+      }
+    ]
+  },
+  "par_paysage": {
+    "source": "Notebook « améliorations v6 » : exactitude moyenne des fenêtres de test dominées (≥ 60 %) par un paysage",
+    "lignes": [
+      {
+        "paysage": "Eau",
+        "fenetres": 245,
+        "exactitude": 0.936,
+        "sous_06": 1.6
+      },
+      {
+        "paysage": "Sable",
+        "fenetres": 103,
+        "exactitude": 0.801,
+        "sous_06": 0.0
+      },
+      {
+        "paysage": "Sol nu",
+        "fenetres": 362,
+        "exactitude": 0.772,
+        "sous_06": 1.4
+      },
+      {
+        "paysage": "Végétation clairsemée",
+        "fenetres": 534,
+        "exactitude": 0.722,
+        "sous_06": 19.3
+      },
+      {
+        "paysage": "Mixte",
+        "fenetres": 506,
+        "exactitude": 0.718,
+        "sous_06": 10.9
+      }
+    ]
+  },
+  "stabilite": {
+    "source": "Notebook « améliorations v6 » : 10 cartes de février 2017-2026",
+    "valides_toutes_dates": 93.0,
+    "stable_5_classes": 76.2,
+    "stable_3_groupes": 87.6,
+    "stable_surface_nue": 93.5,
+    "stable_vegetation_dense": 58.5
+  }
+}

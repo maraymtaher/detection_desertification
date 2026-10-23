@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Cartes & Visualisation{% endblock %}
+{% block entete %}Cartes & Visualisation{% endblock %}
+{% block soustitre %}Couches de résultats sur fond satellite : image, classes du U-Net, NDVI, comparaison d'années.{% endblock %}
+{% block contenu %}
+{% if not choisie %}
+<section class="panneau"><div class="vide">Aucune analyse terminée : lancez une segmentation d'abord.</div></section>
+{% else %}
+<form class="selecteurs" method="get">
+  <label>Carte affichée
+    <select name="analyse" onchange="this.form.comparer.value=''; this.form.submit()">{% for a in analyses %}
+      <option value="{{ a['id'] }}" {{ 'selected' if a['id'] == choisie['id'] }}>{{ a['date_acquisition'] }} · analyse n° {{ a['id'] }}</option>{% endfor %}</select></label>
+  <label>Comparer avec (même zone)
+    <select name="comparer" onchange="this.form.submit()"><option value="">—</option>{% for a in comparables if a['id'] != choisie['id'] %}
+      <option value="{{ a['id'] }}" {{ 'selected' if autre and a['id'] == autre['id'] }}>{{ a['date_acquisition'] }}</option>{% endfor %}</select></label>
+</form>
+
+<div class="grille-detection">
+  <section class="panneau">
+    <div class="corps">
+      <div id="carte" class="carte carte-geante"></div>
+      <div class="outils-carte">
+        <button type="button" id="outil-info" class="actif">{{ ico("oeil") }} Pixel</button>
+        <button type="button" id="outil-mesure">{{ ico("regle") }} Mesurer</button>
+        <button type="button" id="outil-comparer" {{ 'disabled' if not autre }}>{{ ico("compare") }} Comparer</button>
+        <a href="{{ url_for('analyses.fichier', analyse_id=choisie['id'], nom='classes.tif') }}">{{ ico("telecharger") }} Exporter</a>
+        <a href="{{ url_for('rapports.pdf_analyse', analyse_id=choisie['id']) }}">{{ ico("rapport") }} Rapport</a>
+      </div>
+      <p class="note" id="aide-outil">Cliquez sur la carte pour lire la classe et les indices d'un pixel.</p>
+    </div>
+  </section>
+
+  <aside class="panneau">
+    <header><h2>{{ ico("couches") }} Couches</h2><p>Image du {{ choisie['date_acquisition'] }}</p></header>
+    <div class="corps panneau-couches">
+      <label class="couche"><span><input type="checkbox" id="c-rvb" checked> Image Sentinel-2 (RGB)</span></label>
+      <label class="couche"><span><input type="checkbox" id="c-classes" checked> Masque U-Net ({{ choisie['date_acquisition'][:4] }})</span></label>
+      <label class="couche"><span><input type="checkbox" id="c-ndvi" {{ 'disabled' if not ndvi }}> NDVI{% if not ndvi %} <small>(calculé lors d'une analyse temporelle)</small>{% endif %}</span></label>
+      <label class="couche"><span><input type="checkbox" id="c-limites" checked> Limites de la zone</span></label>
+      <label class="couche"><span><input type="checkbox" id="c-fond" checked> Fond de carte</span></label>
+      <label>Transparence des couches <input type="range" id="transparence" min="0" max="100" value="20" style="width:100%; accent-color:var(--accent)"></label>
+      <div>
+        <h3 class="sous-titre">Légende</h3>
+        <div class="legende" style="display:grid; gap:6px">
+          {% for nom, couleur in classes_modele %}<span><i class="pastille" style="background:{{ couleur }}"></i>{{ nom }}</span>{% endfor %}
+          <span><i class="trait"></i>Zone de validité du modèle</span>
+          <span id="legende-ndvi" class="d-none"><i class="pastille" style="background:linear-gradient(90deg,#8c510a,#f6e880,#006837)"></i>NDVI de −0,1 à 0,7</span>
+        </div>
+      </div>
+      <dl class="mesures compact">
+        <div><dt>Surface</dt><dd>{{ resume.surface_km2 | fr(0) }} km²</dd></div>
+        <div><dt>Non classé</dt><dd>{{ resume.statistiques.part_non_classee | fr(1) }} %</dd></div>
+        <div id="ligne-mesure" class="d-none"><dt>Distance mesurée</dt><dd id="val-mesure">—</dd></div>
+      </dl>
+    </div>
+  </aside>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+{% if choisie %}
+<script src="{{ url_for('static', filename='js/carte_visualisation.js') }}"></script>
+<script>
+activerVisualisation({
+  emprise: {{ resume.emprise_wgs84 | tojson }},
+  validite: {{ emprise_modele | tojson }},
+  classes: {{ url_for('analyses.fichier', analyse_id=choisie['id'], nom='carte.png') | tojson }},
+  rvb: {{ url_for('analyses.fichier', analyse_id=choisie['id'], nom='rvb.jpg') | tojson }},
+  ndvi: {% if ndvi %}{{ url_for('vues.ndvi_png', analyse_id=choisie['id']) | tojson }}{% else %}null{% endif %},
+  autre: {% if autre %}{{ url_for('analyses.fichier', analyse_id=autre['id'], nom='carte.png') | tojson }}{% else %}null{% endif %},
+  dateAutre: {{ (autre['date_acquisition'] if autre else '') | tojson }},
+  date: {{ choisie['date_acquisition'] | tojson }},
+  pixel: {{ url_for('analyses.pixel', analyse_id=choisie['id']) | tojson }}
+});
+</script>
+{% endif %}
+{% endblock %}

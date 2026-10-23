@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% from "_icones.html" import ico %}
+{% from "_assistant.html" import assistant %}
 {% block titre %}Nouvelle analyse{% endblock %}
 {% block entete %}Nouvelle analyse{% endblock %}
 {% block soustitre %}Import du produit Sentinel-2, vérification, puis lancement du traitement.{% endblock %}
 {% block contenu %}
+{{ assistant(1) }}
 <div class="deux-colonnes">
   <section class="panneau">
     <header><h2>Importer un produit Sentinel-2</h2><p>Archive SAFE de niveau L2A, 1,5 Go au maximum</p></header>
@@ -23,6 +25,23 @@
     </div>
   </section>
 </div>
+{% if produits %}
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Ou reprendre une image déjà importée</h2>
+    <p>Inutile de renvoyer l'archive : passez directement au choix de la zone.</p></header>
+  <table class="donnees" style="margin-top:8px">
+    <thead><tr><th>Acquisition</th><th>Tuile</th><th class="secondaire">Analyses</th><th></th></tr></thead>
+    <tbody>
+    {% for p in produits %}
+      <tr><td><b>{{ p['date_acquisition'] }}</b></td><td class="mono">{{ p['tuile'] }}</td>
+        <td class="secondaire">{{ p['nb_analyses'] }}</td>
+        <td style="text-align:right"><a class="btn btn-secondaire petit"
+          href="{{ url_for('analyses.zone', produit_id=p['id']) }}">Choisir la zone {{ ico("fleche") }}</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 {% endblock %}
 {% block scripts %}
 <script>activerImport({{ url_for('analyses.importer') | tojson }});</script>

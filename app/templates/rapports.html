@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% macro nb(v, d=1) %}{{ ("%." ~ d ~ "f") | format(v) | replace(".", ",") }}{% endmacro %}
+{% block titre %}Rapports & Export{% endblock %}
+{% block entete %}Rapports & Export{% endblock %}
+{% block actions %}<a class="btn btn-secondaire" href="{{ url_for('historique.page') }}">{{ ico("horloge") }} Historique des traitements</a>{% endblock %}
+{% block soustitre %}Rapports PDF prêts à joindre au mémoire, et fichiers pour QGIS ou Google Earth.{% endblock %}
+{% block contenu %}
+{% if valides %}
+<section class="panneau" style="margin-bottom:20px">
+  <header><h2>Générer un rapport</h2><p>Les cartes et les chiffres viennent de l'analyse temporelle choisie, jamais de valeurs écrites à la main.</p></header>
+  <div class="corps grille-generateur">
+    <form id="generateur">
+      <h3 class="sous-titre">Type de rapport</h3>
+      <div class="types-rapport">
+        <label><input type="radio" name="type" value="complet" checked><b>Rapport complet</b>Réponse, méthode, cartes, évolution, zones, limites, traçabilité (PDF)</label>
+        <label><input type="radio" name="type" value="carto"><b>Données cartographiques</b>Carte des changements (GeoTIFF, PNG), zones (GeoJSON, KML)</label>
+        <label><input type="radio" name="type" value="tableaux"><b>Données tabulaires</b>Surfaces par date et matrice de transition (CSV)</label>
+      </div>
+      <div class="selecteurs" style="margin-top:16px">
+        <label>Période et zone (analyse temporelle)<select name="suivi" id="g-suivi">
+          {% for s in valides %}<option value="{{ loop.index0 }}">{{ s.resume.dates[0][:4] }} → {{ s.resume.dates[-1][:4] }} · suivi n° {{ s.ligne['id'] }} · {{ s.ligne['tuile'] }}</option>{% endfor %}</select></label>
+      </div>
+      <h3 class="sous-titre">Format d'export</h3>
+      <div class="choix-format" id="g-formats"></div>
+      <div class="barre-boutons" style="justify-content:flex-start"><a class="btn btn-principal" id="g-generer" href="#">{{ ico("telecharger") }} Générer le rapport</a></div>
+      <p class="note" id="g-note"></p>
+    </form>
+    <aside>
+      <h3 class="sous-titre">Aperçu</h3>
+      <div class="vue"><div class="cadre-image" id="g-apercu"><img id="g-fond" alt=""><img class="calque" style="opacity:.95" id="g-calque" alt="Carte des changements"></div></div>
+      <h3 class="sous-titre">Détails</h3>
+      <ul class="liste-simple" id="g-details"></ul>
+    </aside>
+  </div>
+</section>
+{% endif %}
+{% if sans_empreinte %}
+<div class="message warning">{{ sans_empreinte }} archive(s) n'ont pas encore d'empreinte SHA-256. Elle est calculée
+  à la première génération d'un rapport qui les utilise : ce premier rapport peut donc prendre plus d'une minute
+  (lecture complète de chaque archive). Les suivants sont rapides.</div>
+{% endif %}
+
+<section class="panneau">
+  <header><h2>Suivis temporels</h2>
+    <p>Rapport complet : réponse, données, méthode, cartes, évolution, zones vérifiées, limites et traçabilité.</p></header>
+  {% if suivis %}
+  <table class="donnees" style="margin-top:8px">
+    <thead><tr><th>Suivi</th><th>Période</th><th class="secondaire">Zone</th><th>Réponse</th>
+      <th class="secondaire">Zones vérifiées</th><th></th></tr></thead>
+    <tbody>
+    {% for s in suivis %}
+      <tr>
+        <td><a href="{{ url_for('suivi.detail', suivi_id=s.ligne['id']) }}"><b>n° {{ s.ligne['id'] }}</b></a></td>
+        <td>{{ s.resume.dates[0] }} → {{ s.resume.dates[-1] }}<br><small style="color:var(--attenue)">{{ s.resume.nb_dates }} images</small></td>
+        <td class="secondaire">{{ s.ligne['tuile'] }} · {{ nb(s.surface, 0) }} km²</td>
+        <td>{% if s.reponse %}<span class="puce {{ 'ok' if s.reponse.ton == 'favorable' else 'alerte' if s.reponse.ton == 'alerte' else 'neutre' }}"><i></i>{{ s.reponse.titre }}</span>
+            {% else %}<span class="puce neutre"><i></i>À recalculer</span>{% endif %}</td>
+        <td class="secondaire">{% if s.zones %}{{ s.zones.verifies }} / {{ s.zones.total }}{% else %}—{% endif %}</td>
+        <td style="text-align:right; white-space:nowrap">
+          {% if s.resume.get('version') == version_methode %}
+          <a class="btn btn-principal" style="padding:6px 13px" href="{{ url_for('rapports.pdf_suivi', suivi_id=s.ligne['id']) }}">{{ ico("rapport") }} Rapport PDF</a>
+          {% endif %}
+        </td>
+      </tr>
+      <tr class="ligne-exports"><td></td><td colspan="5">
+        <div class="telechargements" style="margin:0">
+          {% for f in ("synthese.tif", "serie.csv", "transitions.csv") %}
+          <a class="btn btn-secondaire petit" href="{{ url_for('suivi.fichier', suivi_id=s.ligne['id'], nom=f) }}">{{ f }}</a>
+          {% endfor %}
+          {% if s.zones %}
+          <a class="btn btn-secondaire petit" href="{{ url_for('zones.fichier', suivi_id=s.ligne['id'], nom='foyers.kml') }}">zones.kml</a>
+          <a class="btn btn-secondaire petit" href="{{ url_for('zones.fichier', suivi_id=s.ligne['id'], nom='foyers.geojson') }}">zones.geojson</a>
+          {% endif %}
+        </div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucun suivi terminé.</div>
+  {% endif %}
+</section>
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Analyses (une date)</h2><p>Carte d'occupation du sol, surfaces par classe et traçabilité.</p></header>
+  {% if analyses %}
+  <table class="donnees" style="margin-top:8px">
+    <thead><tr><th>Analyse</th><th>Image</th><th class="secondaire">Tuile</th><th></th></tr></thead>
+    <tbody>
+    {% for a in analyses %}
+      <tr><td><a href="{{ url_for('analyses.detail', analyse_id=a['id']) }}">n° {{ a['id'] }}</a></td>
+        <td><b>{{ a['date_acquisition'] }}</b></td><td class="secondaire mono">{{ a['tuile'] }}</td>
+        <td style="text-align:right; white-space:nowrap">
+          <a class="btn btn-secondaire petit" href="{{ url_for('analyses.fichier', analyse_id=a['id'], nom='classes.tif') }}">GeoTIFF</a>
+          <a class="btn btn-secondaire petit" href="{{ url_for('analyses.fichier', analyse_id=a['id'], nom='statistiques.csv') }}">CSV</a>
+          <a class="btn btn-secondaire petit" href="{{ url_for('rapports.pdf_analyse', analyse_id=a['id']) }}">{{ ico("rapport") }} PDF</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <div class="vide">Aucune analyse terminée.</div>
+  {% endif %}
+</section>
+
+<div class="interpretation">{{ ico("alerte") }}
+  <p><b>Traçabilité.</b> Chaque rapport se termine par l'identifiant ESA et l'empreinte SHA-256 de chaque image,
+  l'empreinte du fichier du modèle et celle des fichiers produits. Recalculer ces empreintes plus tard (par
+  exemple avec <span class="mono">Get-FileHash</span> sous Windows) permet de prouver que les résultats viennent
+  bien de ces données et de ce modèle.</p></div>
+{% endblock %}
+{% block scripts %}
+{% if valides %}
+<script>
+(function () {
+  const suivis = [{% for s in valides %}{
+    pdf: {{ url_for('rapports.pdf_suivi', suivi_id=s.ligne['id']) | tojson }},
+    tif: {{ url_for('suivi.fichier', suivi_id=s.ligne['id'], nom='synthese.tif') | tojson }},
+    png: {{ url_for('suivi.fichier', suivi_id=s.ligne['id'], nom='synthese.png') | tojson }},
+    csv: {{ url_for('suivi.fichier', suivi_id=s.ligne['id'], nom='serie.csv') | tojson }},
+    matrice: {{ url_for('suivi.fichier', suivi_id=s.ligne['id'], nom='transitions.csv') | tojson }},
+    geojson: {% if s.zones %}{{ url_for('zones.fichier', suivi_id=s.ligne['id'], nom='foyers.geojson') | tojson }}{% else %}null{% endif %},
+    kml: {% if s.zones %}{{ url_for('zones.fichier', suivi_id=s.ligne['id'], nom='foyers.kml') | tojson }}{% else %}null{% endif %},
+    fond: {% if s.derniere %}{{ url_for('analyses.fichier', analyse_id=s.derniere, nom='rvb.jpg') | tojson }}{% else %}null{% endif %},
+    details: [{{ (s.resume.nb_dates ~ " images de " ~ s.resume.dates[0] ~ " à " ~ s.resume.dates[-1]) | tojson }},
+              "5 classes · modèle U-Net · résolution 10 m",
+              {{ ("Zone : " ~ (s.surface | round | int) ~ " km² · tuile " ~ s.ligne['tuile']) | tojson }},
+              {{ ("Zones à surveiller : " ~ (s.zones.total if s.zones else "non calculées")) | tojson }}]
+  }{{ "," if not loop.last }}{% endfor %}];
+  const formats = {
+    complet: [["pdf", "PDF"]],
+    carto: [["tif", "GeoTIFF"], ["png", "PNG"], ["geojson", "GeoJSON"], ["kml", "KML"]],
+    tableaux: [["csv", "CSV (surfaces)"], ["matrice", "CSV (matrice)"]]
+  };
+  const f = document.getElementById("generateur");
+  function maj() {
+    const s = suivis[Number(document.getElementById("g-suivi").value)];
+    const type = f.querySelector("input[name=type]:checked").value;
+    const zone = document.getElementById("g-formats");
+    const choisi = (zone.querySelector("input:checked") || {}).value;
+    zone.innerHTML = formats[type].map(function (x, i) {
+      const absent = !s[x[0]];
+      return "<label" + (absent ? " style='opacity:.5' title='Zones à surveiller non calculées'" : "") + "><input type='radio' name='format' value='"
+        + x[0] + "'" + ((choisi === x[0] || (!choisi && i === 0)) && !absent ? " checked" : "") + (absent ? " disabled" : "") + "> " + x[1] + "</label>";
+    }).join("");
+    if (!zone.querySelector("input:checked")) { const p = zone.querySelector("input:not([disabled])"); if (p) { p.checked = true; } }
+    const fmt = (zone.querySelector("input:checked") || {}).value;
+    const lien = document.getElementById("g-generer");
+    lien.href = fmt ? s[fmt] : "#";
+    document.getElementById("g-note").textContent = type === "complet"
+      ? "Le premier rapport calcule l'empreinte SHA-256 des archives : il peut prendre plus d'une minute." : "";
+    document.getElementById("g-calque").src = s.png;
+    const fond = document.getElementById("g-fond");
+    if (s.fond) { fond.src = s.fond; fond.style.display = ""; } else { fond.style.display = "none"; }
+    document.getElementById("g-details").innerHTML = s.details.map(function (d) { return "<li>" + d + "</li>"; }).join("");
+  }
+  f.addEventListener("change", maj);
+  maj();
+})();
+</script>
+{% endif %}
+{% endblock %}

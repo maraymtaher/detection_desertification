@@ -1,4 +1,6 @@
 """Création de l'application Flask."""
+import json
+import re
 import secrets
 
 from flask import Flask, abort, g, request, session
@@ -17,6 +19,7 @@ def creer_app(surcharge=None):
         DOSSIER_RESULTATS=str(config.DOSSIER_RESULTATS),
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
+        PERMANENT_SESSION_LIFETIME=30 * 24 * 3600,
     )
     if surcharge:
         app.config.update(surcharge)
@@ -56,15 +59,54 @@ def creer_app(surcharge=None):
     app.jinja_env.globals["emprise_modele"] = list(cm.EMPRISE_ENTRAINEMENT)
     app.jinja_env.globals["tuiles_modele"] = sorted(cm.TUILES_ENTRAINEMENT)
     app.jinja_env.filters["zip"] = lambda a, b: list(zip(a, b))
+    app.jinja_env.filters["fromjson"] = json.loads
+
+    def format_fr(valeur, decimales=1):
+        """Nombre au format français : 268 289 ; 69,8."""
+        if valeur is None:
+            return "—"
+        texte = f"{float(valeur):,.{int(decimales)}f}"
+        return texte.replace(",", "\u202f").replace(".", ",")
+    app.jinja_env.filters["fr"] = format_fr
+    # Texte déjà enregistré (« 69.8 % ») : virgule décimale
+    app.jinja_env.filters["virgule"] = lambda texte: re.sub(r"(\d)\.(\d)", r"\1,\2", str(texte))
     app.jinja_env.globals["nom_systeme"] = config.NOM_SYSTEME
     app.jinja_env.globals["sous_titre"] = config.SOUS_TITRE
     app.jinja_env.globals["surface_max"] = config.SURFACE_MAX_KM2
+    from moteur.serie import VERSION as VERSION_METHODE
+    app.jinja_env.globals["version_methode"] = VERSION_METHODE
 
-    from app.routes import analyses, auth, main, suivi
+    from moteur import tracabilite
+
+    @app.context_processor
+    def version_modele():
+        """Version du système et empreinte du modèle, pour le pied de page."""
+        return {"version_systeme": tracabilite.VERSION_SYSTEME,
+                "modele_courant": tracabilite.empreinte_modele()}
+
+    @app.context_processor
+    def alertes():
+        """Nombre de zones à surveiller du dernier suivi sans avis (cloche)."""
+        if g.get("utilisateur") is None:
+            return {"alertes_a_verifier": 0}
+        from app.indicateurs import zones_du_suivi
+        dernier = modeles_bd.bd().execute(
+            "SELECT * FROM suivi WHERE utilisateur_id = ? AND statut = 'terminee' "
+            "ORDER BY id DESC LIMIT 1", (g.utilisateur["id"],)).fetchone()
+        z = zones_du_suivi(dernier) if dernier else None
+        return {"alertes_a_verifier": (z["total"] - z["verifies"]) if z else 0}
+
+    from app.routes import (analyses, auth, detection, historique, images, main, qualite, vues,
+                            rapports, statistiques, suivi, zones)
+    for module in (detection, images, statistiques, historique, vues):
+        app.register_blueprint(module.bp)
+    app.register_blueprint(qualite.bp)
+    app.register_blueprint(rapports.bp)
     app.register_blueprint(main.bp)
     app.register_blueprint(auth.bp)
     app.register_blueprint(analyses.bp)
     app.register_blueprint(suivi.bp)
+    app.register_blueprint(zones.bp)
 
     if app.config.get("LANCER_EXECUTANT", True):
         from app import taches

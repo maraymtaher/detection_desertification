@@ -1,0 +1,18 @@
+{% extends "base_public.html" %}
+{% block titre %}Vérification{% endblock %}
+{% block contenu %}
+<div class="chargement"><span class="roue"></span></div>
+<h2 style="text-align:center">Vérification de votre compte…</h2>
+<p class="intro" style="text-align:center">Veuillez patienter, nous vérifions vos informations et préparons votre espace.</p>
+<ul class="etapes-verif">
+  <li class="faite">{{ ico("coche") }} Informations du compte : {{ g.utilisateur['nom'] }}</li>
+  <li class="faite">{{ ico("coche") }} Espace de travail : {{ nb_images }} image(s), {{ nb_analyses }} analyse(s)</li>
+  <li id="finalisation">{{ ico("horloge") }} Finalisation</li>
+</ul>
+{% endblock %}
+{% block scripts %}
+<script>
+setTimeout(function () { document.getElementById("finalisation").classList.add("faite"); }, 500);
+setTimeout(function () { window.location.replace({{ url_for('main.accueil') | tojson }}); }, 1100);
+</script>
+{% endblock %}

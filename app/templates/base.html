@@ -1,4 +1,5 @@
 {% from "_icones.html" import ico, choix_theme %}
+{% from "_haut.html" import outils_haut with context %}
 <!doctype html>
 <html lang="fr">
 <head>
@@ -12,41 +13,55 @@
 <body>
 <div class="coque">
   <aside class="lateral">
-    <a class="marque" href="{{ url_for('main.accueil') }}">
-      <span class="sigle">{{ ico("globe") }}</span>
-      <span><b>{{ nom_systeme }}</b><small>{{ sous_titre }}</small></span>
-    </a>
+    <div class="tete-lateral">
+      <a class="marque" href="{{ url_for('main.accueil') }}" title="{{ nom_systeme }}">
+        <span class="sigle">{{ ico("feuille") }}</span>
+        <span class="texte-menu"><b>{{ nom_systeme }}</b><small>{{ sous_titre }}</small></span>
+      </a>
+      <button type="button" class="replier" onclick="basculerMenu()"
+              title="Réduire ou agrandir le menu" aria-label="Réduire ou agrandir le menu">{{ ico("menu") }}</button>
+    </div>
     <nav class="menu">
       <a href="{{ url_for('main.accueil') }}"
-         class="{{ 'actif' if request.endpoint == 'main.accueil' }}">{{ ico("bord") }} Tableau de bord</a>
-      <a href="{{ url_for('analyses.importer') }}"
-         class="{{ 'actif' if request.endpoint in ('analyses.importer', 'analyses.fiche', 'analyses.zone') }}">{{ ico("import") }} Nouvelle analyse</a>
-      <a href="{{ url_for('analyses.liste') }}"
-         class="{{ 'actif' if request.endpoint in ('analyses.liste', 'analyses.detail') }}">{{ ico("carte") }} Analyses et cartes</a>
-      <a href="{{ url_for('suivi.liste') }}"
-         class="{{ 'actif' if request.endpoint in ('suivi.liste', 'suivi.detail') }}">{{ ico("historique") }} Suivi temporel</a>
+         class="{{ 'actif' if request.endpoint == 'main.accueil' }}">{{ ico("bord") }}<span class="texte-menu">Tableau de bord</span></a>
+      <a href="{{ url_for('images.liste') }}"
+         class="{{ 'actif' if request.endpoint and (request.endpoint.startswith('images.') or request.endpoint == 'analyses.importer') }}">{{ ico("satellite") }}<span class="texte-menu">Données Sentinel-2</span></a>
+      <a href="{{ url_for('vues.pretraitement') }}"
+         class="{{ 'actif' if request.endpoint in ('vues.pretraitement', 'analyses.fiche', 'analyses.zone') }}">{{ ico("filtre") }}<span class="texte-menu">Prétraitement</span></a>
+      <a href="{{ url_for('vues.segmentation') }}"
+         class="{{ 'actif' if request.endpoint in ('vues.segmentation', 'analyses.detail', 'analyses.liste') }}">{{ ico("reseau") }}<span class="texte-menu">Segmentation U-Net</span></a>
+      <a href="{{ url_for('vues.cartes') }}"
+         class="{{ 'actif' if request.endpoint == 'vues.cartes' }}">{{ ico("carte") }}<span class="texte-menu">Cartes & Visualisation</span></a>
+      <a href="{{ url_for('statistiques.page') }}"
+         class="{{ 'actif' if request.endpoint and (request.endpoint.startswith('statistiques.') or request.endpoint.startswith('suivi.')) }}">{{ ico("courbe") }}<span class="texte-menu">Analyse temporelle</span></a>
+      <a href="{{ url_for('detection.page') }}"
+         class="{{ 'actif' if request.endpoint and request.endpoint.startswith('detection.') }}">{{ ico("cible") }}<span class="texte-menu">Détection</span></a>
+      <a href="{{ url_for('zones.liste') }}"
+         class="{{ 'actif' if request.endpoint and request.endpoint.startswith('zones.') }}">{{ ico("alerte") }}<span class="texte-menu">Zones à surveiller</span></a>
+      <a href="{{ url_for('qualite.page') }}"
+         class="{{ 'actif' if request.endpoint == 'qualite.page' }}">{{ ico("qualite") }}<span class="texte-menu">Évaluation du modèle</span></a>
+      <a href="{{ url_for('rapports.liste') }}"
+         class="{{ 'actif' if request.endpoint and (request.endpoint.startswith('rapports.') or request.endpoint.startswith('historique.')) }}">{{ ico("rapport") }}<span class="texte-menu">Rapports & Export</span></a>
     </nav>
     <div class="pied-lateral">
-      <div class="etat-systeme">
-        <div class="titre-etat"><span class="voyant"></span> Système opérationnel</div>
-        <div class="ligne-etat">Résolution <b>10 m</b></div>
-        <div class="ligne-etat">Canaux <b>14</b></div>
-        <div class="ligne-etat">Tuiles <b>{{ tuiles_modele | join(" · ") }}</b></div>
-      </div>
-      <div class="bloc-theme"><span>Apparence</span>{{ choix_theme() }}</div>
-      <div class="compte">
-        <span class="avatar">{{ g.utilisateur['nom'][:1] | upper }}</span>
-        <span class="qui">{{ g.utilisateur['nom'] }}<small>{{ g.utilisateur['email'] }}</small></span>
-        <form method="post" action="{{ url_for('auth.deconnexion') }}">
-          <input type="hidden" name="jeton" value="{{ jeton() }}">
-          <button title="Déconnexion" aria-label="Déconnexion">{{ ico("sortie") }}</button>
-        </form>
+      <div class="lieu-etude" title="Centre de la zone de validité du modèle">
+        <span class="lieu-icone">{{ ico("repere") }}</span>
+        <span class="texte-menu"><b>Emprise de validation : Bol (Mamdi)</b>Lac · Tchad<br>
+          <span class="mono">{{ "%.2f" | format((emprise_modele[1] + emprise_modele[3]) / 2) | replace(".", ",") }}° N ·
+          {{ "%.2f" | format((emprise_modele[0] + emprise_modele[2]) / 2) | replace(".", ",") }}° E</span></span>
       </div>
     </div>
   </aside>
 
   <div class="principal">
-    <main class="contenu">
+    {% block bandeau %}<header class="barre-haut">
+      <form class="recherche" method="get" action="{{ url_for('vues.recherche') }}" role="search">
+        {{ ico("loupe") }}<input name="q" value="{{ request.args.get('q', '') if request.endpoint == 'vues.recherche' }}"
+          placeholder="Rechercher une date, une image, une analyse, un suivi…" aria-label="Rechercher">
+      </form>
+      {{ outils_haut() }}</header>{% endblock %}
+    <main class="contenu {% block classe_contenu %}{% endblock %}">
+      {% block titre_page %}
       <div class="titre-page">
         <div>
           <h1>{% block entete %}Tableau de bord{% endblock %}</h1>
@@ -54,11 +69,20 @@
         </div>
         <div class="actions">{% block actions %}{% endblock %}</div>
       </div>
+      {% endblock %}
       {% for categorie, message in get_flashed_messages(with_categories=true) %}
         <div class="message {{ categorie }}">{{ message }}</div>
       {% endfor %}
       {% block contenu %}{% endblock %}
     </main>
+    <footer class="pied-page">
+      <span>{{ nom_systeme }} v{{ version_systeme }}</span>
+      <span>Modèle U-Net ·
+        {% if modele_courant %}<span class="mono">{{ modele_courant.fichier }}</span> ·
+        SHA-256 <span class="mono" title="{{ modele_courant.sha256 }}">{{ modele_courant.sha256[:12] }}…</span>
+        {% else %}fichier du modèle introuvable{% endif %}</span>
+      <span>Sentinel-2 L2A · 10 m · 14 canaux · 5 classes</span>
+    </footer>
   </div>
 </div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

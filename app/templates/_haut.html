@@ -1,0 +1,21 @@
+{# Outils en haut à droite : alertes et menu de l'utilisateur (toutes les pages) #}
+{% from "_icones.html" import ico, choix_theme %}
+{% macro outils_haut() %}
+<div class="outils-haut">
+  <a class="cloche" href="{{ url_for('zones.liste') }}"
+     title="{{ alertes_a_verifier }} zone(s) à surveiller sans avis">{{ ico("cloche") }}
+    {% if alertes_a_verifier %}<span class="pastille-compte">{{ alertes_a_verifier }}</span>{% endif %}</a>
+  <details class="menu-utilisateur">
+    <summary><span class="avatar">{{ ico("utilisateur") }}</span>
+      <span class="nom-utilisateur">{{ g.utilisateur['nom'] }}</span></summary>
+    <div class="liste-utilisateur">
+      <div class="qui">{{ g.utilisateur['nom'] }}<small>{{ g.utilisateur['email'] }}</small></div>
+      <div class="ligne">Apparence {{ choix_theme() }}</div>
+      <form method="post" action="{{ url_for('auth.deconnexion') }}">
+        <input type="hidden" name="jeton" value="{{ jeton() }}">
+        <button class="btn btn-secondaire">{{ ico("sortie") }} Déconnexion</button>
+      </form>
+    </div>
+  </details>
+</div>
+{% endmacro %}

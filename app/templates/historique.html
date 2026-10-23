@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% from "_statut.html" import statut %}
+{% block titre %}Historique des traitements{% endblock %}
+{% block entete %}Historique des traitements{% endblock %}
+{% block soustitre %}Tous les calculs lancés sur la plateforme, pour retrouver et reproduire chaque résultat.{% endblock %}
+{% block contenu %}
+<div class="indicateurs">
+  <div class="indicateur"><span class="rond">{{ ico("historique") }}</span>
+    <div><div class="nombre">{{ total }}</div><div class="nom">Traitements enregistrés</div></div></div>
+  <div class="indicateur"><span class="rond">{{ ico("coche") }}</span>
+    <div><div class="nombre">{{ comptes.terminee }}</div><div class="nom">Terminés</div></div></div>
+  <div class="indicateur"><span class="rond sable">{{ ico("analyse") }}</span>
+    <div><div class="nombre">{{ comptes.en_cours + comptes.en_attente }}</div><div class="nom">En cours ou en attente</div></div></div>
+  <div class="indicateur"><span class="rond rouge">{{ ico("alerte") }}</span>
+    <div><div class="nombre">{{ comptes.echouee }}</div><div class="nom">Échoués</div></div></div>
+</div>
+
+<form class="filtres" method="get">
+  <label>Type <select name="type" onchange="this.form.submit()">
+    <option value="">Tous</option>
+    {% for k, v in types.items() %}<option value="{{ k }}" {{ 'selected' if filtres.type == k }}>{{ v }}</option>{% endfor %}</select></label>
+  <label>État <select name="statut" onchange="this.form.submit()">
+    <option value="">Tous</option>
+    {% for k, v in statuts.items() %}<option value="{{ k }}" {{ 'selected' if filtres.statut == k }}>{{ v }}</option>{% endfor %}</select></label>
+  {% if filtres.type or filtres.statut %}<a href="{{ url_for('historique.page') }}">Effacer les filtres</a>{% endif %}
+  <span class="compte-filtre">{{ lignes | length }} traitement(s) affiché(s)</span>
+</form>
+
+<section class="panneau">
+  {% if lignes %}
+  <div class="defile">
+  <table class="donnees">
+    <thead><tr><th>Type</th><th>N°</th><th>Objet</th><th>Lancé le</th><th>État</th>
+      <th class="num">Durée</th><th>Modèle (SHA-256)</th><th></th></tr></thead>
+    <tbody>
+    {% for l in lignes %}
+      <tr>
+        <td>{{ types[l.type] }}</td>
+        <td class="mono">{{ l.id }}</td>
+        <td>{{ l.objet }}{% if l.detail %}<br><small style="color:var(--attenue)">{{ l.detail }}</small>{% endif %}
+          {% if l.message %}<br><small class="alerte-texte">{{ l.message }}</small>{% endif %}</td>
+        <td style="white-space:nowrap">{{ l.lance_local or '—' }}</td>
+        <td>{{ statut(l.statut) }}</td>
+        <td class="num">{% if l.duree is not none %}{{ l.duree | fr(0) }} s{% else %}—{% endif %}</td>
+        <td class="mono">{% if l.modele %}{{ l.modele }}…{% elif l.type == 'analyse' and l.statut == 'terminee' %}<small>non enregistré</small>{% else %}—{% endif %}</td>
+        <td style="text-align:right; white-space:nowrap">
+          <a class="btn btn-secondaire petit" href="{{ l.lien }}">Consulter</a>
+          {% if l.type == 'analyse' and l.statut in ('terminee', 'echouee') %}
+          <form method="post" action="{{ url_for('historique.relancer_analyse', analyse_id=l.id) }}" style="display:inline"
+                onsubmit="return confirm('Relancer cette analyse avec la même image et la même zone ? L\'ancienne est conservée.');">
+            <input type="hidden" name="jeton" value="{{ jeton() }}">
+            <button class="btn btn-secondaire petit" title="Même image, même zone">Relancer</button></form>
+          {% elif l.type == 'suivi' and l.statut in ('terminee', 'echouee') %}
+          <form method="post" action="{{ url_for('suivi.relancer', suivi_id=l.id) }}" style="display:inline"
+                onsubmit="return confirm('Recalculer ce suivi ? Ses zones à surveiller et leurs avis seront effacés.');">
+            <input type="hidden" name="jeton" value="{{ jeton() }}">
+            <button class="btn btn-secondaire petit">Recalculer</button></form>
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <div class="vide">Aucun traitement ne correspond à ces filtres.</div>
+  {% endif %}
+</section>
+<p class="note" style="margin-top:14px">L'empreinte du modèle (SHA-256) identifie le fichier exact du réseau utilisé.
+  Les analyses lancées avant l'ajout de la traçabilité n'en ont pas : les relancer pour l'enregistrer.
+  Les heures sont celles de cet ordinateur.</p>
+{% endblock %}

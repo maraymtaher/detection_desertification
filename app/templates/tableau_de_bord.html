@@ -1,108 +1,100 @@
 {% extends "base.html" %}
 {% from "_icones.html" import ico %}
-{% from "_statut.html" import statut %}
-{% block soustitre %}Vue générale des analyses satellitaires et des résultats disponibles.{% endblock %}
+{% block titre %}Tableau de bord{% endblock %}
+{% block entete %}Bonjour {{ g.utilisateur['nom'] }}{% endblock %}
+{% block soustitre %}Voici un aperçu de votre plateforme.{% endblock %}
 {% block contenu %}
-<div class="indicateurs">
-  <div class="indicateur"><span class="rond">{{ ico("analyse") }}</span>
-    <div><div class="nombre">{{ chiffres.analyses }}</div><div class="nom">Analyses réalisées</div></div></div>
-  <div class="indicateur"><span class="rond">{{ ico("satellite") }}</span>
-    <div><div class="nombre">{{ chiffres.produits }}</div><div class="nom">Images importées</div></div></div>
-  <div class="indicateur"><span class="rond sable">{{ ico("calendrier") }}</span>
-    <div><div class="nombre">2017–2026</div><div class="nom">Période des données d'entraînement</div></div></div>
-  <div class="indicateur"><span class="rond sable">{{ ico("modele") }}</span>
-    <div><div class="nombre">U-Net</div><div class="nom">Modèle de segmentation</div></div></div>
+<div class="kpis">
+  <div class="kpi"><span class="rond">{{ ico("satellite") }}</span><div>
+    <div class="kpi-titre">Images Sentinel-2</div><div class="kpi-valeur">{{ nb_images }}</div>
+    <div class="kpi-detail">disponibles</div></div></div>
+  <div class="kpi"><span class="rond">{{ ico("courbe") }}</span><div>
+    <div class="kpi-titre">Analyses réalisées</div><div class="kpi-valeur">{{ nb_analyses }}</div>
+    <div class="kpi-detail">{{ ce_mois }} ce mois-ci{% if en_cours %} · {{ en_cours }} en cours{% endif %}</div></div></div>
+  <div class="kpi"><span class="rond sable">{{ ico("repere") }}</span><div>
+    <div class="kpi-titre">Emprise de validation</div><div class="kpi-valeur" style="font-size:19px">Bol (Mamdi)</div>
+    <div class="kpi-detail">province du Lac · tuiles {{ tuiles_modele | join(", ") }}</div></div></div>
+  <div class="kpi"><span class="rond">{{ ico("cible") }}</span><div>
+    <div class="kpi-titre">Dernière détection</div>
+    <div class="kpi-valeur" style="font-size:19px">{% if reponse %}{{ reponse.confirmee_ha | fr(0) }} ha{% else %}—{% endif %}</div>
+    <div class="kpi-detail">{% if reponse %}pertes confirmées · {{ saison_detection }} · {{ reponse.debut[:4] }}–{{ reponse.fin[:4] }} · domaine {{ domaine_detection }}{% else %}aucune détection{% endif %}</div></div></div>
 </div>
 
-<div class="grille-bord">
+<div class="grille-centre">
   <section class="panneau">
-    <header><h2>Nouvelle analyse</h2><p>Importer un produit Sentinel-2</p></header>
-    <div class="corps">{% include "_import.html" %}</div>
+    <header class="avec-reglage"><div><h2>{% if carte %}Dernière zone analysée (image du {{ carte.date }}){% else %}Emprise de validation du modèle{% endif %}</h2>
+      <p>{% if carte %}Classification sur fond satellite · cadre orange : emprise de validation du modèle{% else %}Zone de validité du modèle{% endif %}</p></div>
+      {% if carte %}<a class="btn btn-secondaire petit" href="{{ url_for('vues.cartes', analyse=carte.id) }}">Ouvrir la carte</a>{% endif %}</header>
+    <div class="corps"><div id="carte" class="carte" style="height:360px"></div></div>
   </section>
-
   <section class="panneau">
-    <header><h2>Zone de visualisation</h2>
-      <p>Zone de validité du modèle et tuiles Sentinel-2 couvertes</p></header>
+    <header><h2>Répartition des classes</h2><p>{% if carte %}Image la plus récente · image du {{ carte.date }}{% else %}Aucune analyse{% endif %}</p></header>
     <div class="corps">
-      <div id="carte" class="carte"></div>
-      <div class="legende">
-        {% for nom, couleur in classes_modele %}
-        <span><i class="pastille" style="background:{{ couleur }}"></i>{{ nom }}</span>
-        {% endfor %}
+      {% if carte %}
+      <div class="repartition">
+        <div class="anneau-boite">{{ carte.anneau }}</div>
+        <table class="surfaces">
+          {% for (nom, couleur), c in classes_modele | zip(carte.classes) %}
+          <tr><td><i class="pastille" style="background:{{ couleur }}"></i></td><td class="nom-classe">{{ nom }}</td>
+            <td class="num fort">{{ c.pourcentage | fr(1) }} %</td></tr>
+          {% endfor %}
+        </table>
       </div>
-      <div class="legende" style="margin-top:8px; color:var(--attenue)">
-        <span><i class="trait"></i>Zone de validité du modèle</span>
-        <span><i class="trait tirets"></i>Tuiles Sentinel-2</span>
-      </div>
-      <p class="note">Les résultats géoréférencés de chaque analyse s'afficheront sur cette carte.</p>
+      <p class="note">Part des pixels classés ; {{ carte.non_classe | fr(1) }} % non classés (nuages). <b>État d'une seule date : ne mesure pas une évolution.</b></p>
+      {% else %}<div class="vide">Lancez une première segmentation.</div>{% endif %}
     </div>
   </section>
 </div>
 
-<section class="panneau" style="margin-top:20px">
-  <header><h2>Chaîne de traitement automatique</h2>
-    <p>Les cinq étapes exécutées par le système pour chaque image</p></header>
-  <div class="corps">
-    <div class="chaine">
-      <div><b>Import</b>Archive SAFE de niveau L2A</div>
-      <div><b>Vérification</b>Niveau, bandes, couche nuages</div>
-      <div><b>Prétraitement</b>10 bandes et 4 indices à 10 m</div>
-      <div><b>Segmentation</b>U-Net, fenêtres de 128 × 128</div>
-      <div><b>Résultats</b>Carte, surfaces, exports</div>
-    </div>
+<div class="bandeau-etat">
+  <span>{{ ico("coche") }} Système opérationnel · {% if en_cours %}{{ en_cours }} traitement(s) en cours{% else %}prêt pour une nouvelle analyse{% endif %}</span>
+  <div style="display:flex; gap:10px; flex-wrap:wrap">
+    <a class="btn btn-secondaire" href="{{ url_for('detection.page') }}">{{ ico("cible") }} Lancer une détection</a>
+    <a class="btn btn-principal" href="{{ url_for('vues.segmentation') }}">{{ ico("lecture") }} Nouvelle analyse</a>
   </div>
-</section>
+</div>
 
-{% if analyses %}
-<section class="panneau" style="margin-top:20px">
-  <header><h2>Analyses récentes</h2><p>Les cinq dernières ·
-    <a href="{{ url_for('analyses.liste') }}">voir tout l'historique</a></p></header>
-  <table class="donnees" style="margin-top:8px">
-    <thead><tr><th>N°</th><th>Image</th><th>Tuile</th><th>État</th><th></th></tr></thead>
-    <tbody>
-    {% for a in analyses %}
-      <tr><td class="mono">{{ a['id'] }}</td><td><b>{{ a['date_acquisition'] }}</b></td>
-        <td class="mono">{{ a['tuile'] }}</td><td>{{ statut(a['statut']) }}</td>
-        <td style="text-align:right"><a class="btn btn-secondaire" style="padding:5px 13px"
-          href="{{ url_for('analyses.detail', analyse_id=a['id']) }}">Ouvrir</a></td></tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</section>
+{% if reponse %}
+<div class="grille-centre">
+  <section class="reponse compacte {{ reponse.ton }}">
+    <p class="question">Dernière détection · {{ reponse.debut[:4] }}–{{ reponse.fin[:4] }} · {{ reponse.nb_dates }} images</p>
+    <h2>{{ reponse.titre }}</h2>
+    <p>{{ (reponse.confirmee_ha / 100) | fr(1) }} km² de pertes de végétation confirmées ({{ reponse.part_degradation | fr(2) }} % de la zone),
+      {{ (reponse.amelioration_ha / 100) | fr(1) }} km² de gains de végétation.{% if reponse.validite_statut and reponse.validite_statut != 'valide' %}
+      <b>Résultat {{ 'partiellement ' if reponse.validite_statut == 'partiel' }}indicatif</b> (zone hors entraînement du modèle).{% endif %}</p>
+    <a class="btn btn-secondaire petit" href="{{ url_for('statistiques.page', suivi=dernier['id']) }}">Analyse temporelle</a>
+  </section>
+  <section class="panneau">
+    <header class="avec-reglage"><div><h2>Zones à surveiller</h2><p>{% if zones %}{{ zones.verifies }} vérifiée(s) sur {{ zones.total }}{% else %}non calculées{% endif %}</p></div>
+      {% if dernier %}<a class="btn btn-secondaire petit" href="{{ url_for('zones.detail', suivi_id=dernier['id']) }}">Voir</a>{% endif %}</header>
+    {% if zones %}
+    <table class="donnees" style="margin-top:4px"><tbody>
+      {% for f in zones.resultat.foyers[:4] %}{% set a = zones.avis.get(f.numero) %}
+      <tr><td><b>Zone {{ f.numero }}</b></td><td>{{ f.hectares_confirmes | fr(1) }} ha confirmés</td>
+        <td>{% if a %}{{ {'visible': 'Visible', 'non_visible': 'Non confirmée', 'incertain': 'Incertain'}[a['avis']] }}{% else %}À vérifier{% endif %}</td>
+        <td style="text-align:right"><a href="{{ url_for('zones.fiche', suivi_id=dernier['id'], numero=f.numero) }}">Examiner</a></td></tr>
+      {% endfor %}</tbody></table>
+    {% endif %}
+  </section>
+</div>
 {% endif %}
-
-<section class="panneau" style="margin-top:20px">
-  <header><h2>Images importées</h2><p>{{ chiffres.produits }} produit(s) Sentinel-2 dans votre espace</p></header>
-  {% if produits %}
-  <table class="donnees" style="margin-top:8px">
-    <thead><tr><th>Acquisition</th><th>Tuile</th><th class="secondaire">Satellite</th>
-      <th class="secondaire">Traitement</th><th>État</th><th class="secondaire">Importée le</th><th></th></tr></thead>
-    <tbody>
-    {% for p in produits %}
-      <tr>
-        <td><b>{{ p['date_acquisition'] }}</b></td>
-        <td class="mono">{{ p['tuile'] }}</td>
-        <td class="secondaire">{{ p['satellite'] }}</td>
-        <td class="secondaire mono">{{ p['version_traitement'] }}</td>
-        <td>{% if p['avertissements'] %}<span class="puce alerte"><i></i>Hors zone</span>
-            {% else %}<span class="puce ok"><i></i>Vérifiée</span>{% endif %}</td>
-        <td class="secondaire" style="color:var(--attenue)">{{ p['importe_le'][:16] }}</td>
-        <td style="text-align:right">
-          <a class="btn btn-secondaire" style="padding:5px 13px"
-             href="{{ url_for('analyses.fiche', produit_id=p['id']) }}">Ouvrir</a></td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <div class="vide">Aucune image pour l'instant. Utilisez « Nouvelle analyse » pour importer
-    une archive Sentinel-2 L2A téléchargée depuis le Copernicus Browser.</div>
-  {% endif %}
-</section>
 {% endblock %}
 {% block scripts %}
 <script>
-carteZone("carte", {{ emprise_modele | tojson }});
-activerImport({{ url_for('analyses.importer') | tojson }});
+(function () {
+  const carte = carteZone("carte", {{ emprise_modele | tojson }});
+  {% if carte %}
+  const e = {{ carte.emprise | tojson }};
+  const urlClasses = {{ url_for('analyses.fichier', analyse_id=carte.id, nom='carte.png') | tojson }};
+  if (carte) {
+    L.imageOverlay(urlClasses, [[e[1], e[0]], [e[3], e[2]]], { opacity: 0.85 }).addTo(carte);
+    carte.fitBounds([[e[1], e[0]], [e[3], e[2]]]);
+  } else {
+    const boite = document.getElementById("carte");
+    boite.classList.add("carte-hors-ligne");
+    boite.innerHTML = "<img src='" + {{ url_for('analyses.fichier', analyse_id=carte.id, nom='rvb.jpg') | tojson }} + "' alt=''><img class='calque' src='" + urlClasses + "' alt=''>";
+  }
+  {% endif %}
+})();
 </script>
 {% endblock %}

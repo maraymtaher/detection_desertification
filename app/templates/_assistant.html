@@ -1,0 +1,23 @@
+   {# Assistant « Nouvelle analyse » : 4 étapes, affiché en haut de chaque page du parcours.
+   etape : numéro de l'étape en cours (1 à 4) ; produit, analyse : lignes de la base si connues. #}
+{% macro assistant(etape, produit=None, analyse=None) %}
+{% set etapes = [
+  ("Importer l'image", "Archive Sentinel-2 L2A (.zip)", url_for('analyses.importer')),
+  ("Vérifier le produit", "Niveau, bandes, nuages, tuile",
+     url_for('analyses.fiche', produit_id=produit['id']) if produit else None),
+  ("Choisir la zone", "Rectangle, zone de validité ou image entière",
+     url_for('analyses.zone', produit_id=produit['id']) if produit else None),
+  ("Lancer et suivre", "Segmentation par le U-Net",
+     url_for('analyses.detail', analyse_id=analyse['id']) if analyse else None),
+] %}
+<nav class="assistant" aria-label="Étapes d'une nouvelle analyse">
+  {% for titre, aide, lien in etapes %}
+    {% set n = loop.index %}
+    {% set etat = "faite" if n < etape else ("courante" if n == etape else "") %}
+    {% if lien and n != etape %}<a class="{{ etat }}" href="{{ lien }}">{% else %}<div class="{{ etat }}"{% if n == etape %} aria-current="step"{% endif %}>{% endif %}
+      <span class="num-etape">{% if n < etape %}✓{% else %}{{ n }}{% endif %}</span>
+      <span><b>{{ titre }}</b><small>{{ aide }}</small></span>
+    {% if lien and n != etape %}</a>{% else %}</div>{% endif %}
+  {% endfor %}
+</nav>
+{% endmacro %}

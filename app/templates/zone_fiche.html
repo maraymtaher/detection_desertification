@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% macro nb(v, d=1) %}{{ ("%." ~ d ~ "f") | format(v) | replace(".", ",") }}{% endmacro %}
+{% set n = resultat.nb_foyers %}
+{% block titre %}Zone {{ foyer.numero }} · suivi n° {{ suivi['id'] }}{% endblock %}
+{% block entete %}Zone à surveiller n° {{ foyer.numero }} <small class="sur">sur {{ n }}</small>{% endblock %}
+{% block soustitre %}{{ "%.5f" | format(foyer.centre[1]) }} N, {{ "%.5f" | format(foyer.centre[0]) }} E · carré de 1 km · suivi n° {{ suivi['id'] }}{% endblock %}
+{% block actions %}
+{% if foyer.numero > 1 %}<a class="btn btn-secondaire" href="{{ url_for('zones.fiche', suivi_id=suivi['id'], numero=foyer.numero - 1) }}">← Zone {{ foyer.numero - 1 }}</a>{% endif %}
+<a class="btn btn-secondaire" href="{{ url_for('zones.detail', suivi_id=suivi['id']) }}">Liste</a>
+{% if foyer.numero < n %}<a class="btn btn-secondaire" href="{{ url_for('zones.fiche', suivi_id=suivi['id'], numero=foyer.numero + 1) }}">Zone {{ foyer.numero + 1 }} →</a>{% endif %}
+{% endblock %}
+{% block contenu %}
+
+<section class="panneau">
+  <header><h2>Images en vraies couleurs</h2>
+    <p>Même étirement pour les deux dates · contour rouge : pixels de perte de végétation confirmée (U-Net + NDVI)</p></header>
+  <div class="corps">
+    <label class="interrupteur"><input type="checkbox" id="voir-contour" checked> Afficher le contour</label>
+    {% if foyer.images %}
+    <div class="avant-apres">
+      {% for im in foyer.images %}
+      <figure><div class="superpose"><img src="{{ url_for('zones.fichier', suivi_id=suivi['id'], nom=im.fichier) }}" alt="Zone {{ foyer.numero }}, {{ im.date }}">
+        <img class="calque" src="{{ url_for('zones.fichier', suivi_id=suivi['id'], nom='foyer_%02d_contour.png' % foyer.numero) }}" alt=""></div>
+        <figcaption><b>{{ 'Avant' if im.rang == 'avant' else 'Après' }}</b> · {{ im.date }}</figcaption></figure>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="note">Images indisponibles : les archives SAFE n'ont pas pu être lues.</p>
+    {% endif %}
+  </div>
+</section>
+
+<div class="grille-resultat" style="margin-top:20px">
+  <section class="panneau">
+    <header><h2>Pourquoi cette zone est signalée</h2></header>
+    <div class="corps">
+      <table class="surfaces">
+        <tr><td></td><td class="nom-classe">Perte de végétation confirmée (U-Net + baisse du NDVI &gt; 0,10)</td><td class="num fort">{{ nb(foyer.hectares_confirmes) }} ha</td></tr>
+        <tr><td></td><td class="nom-classe">Perte non confirmée par le NDVI (U-Net seul)</td><td class="num">{{ nb(foyer.hectares_un_indicateur) }} ha</td></tr>
+        <tr><td></td><td class="nom-classe">Transition principale (U-Net, début → fin)</td>
+          <td class="num">{% if foyer.transition.de == foyer.transition.vers %}pas de classe majoritaire différente ({{ foyer.transition.de }}){% else %}{{ foyer.transition.de }} → {{ foyer.transition.vers }} <small>({{ nb(foyer.transition.part, 0) }} %)</small>{% endif %}</td></tr>
+        <tr><td></td><td class="nom-classe">Pixels en perte dont la baisse se confirme d'année en année</td><td class="num">{{ nb(foyer.part_progressive) }} %</td></tr>
+        <tr><td></td><td class="nom-classe">Domaine de validité du modèle</td>
+          <td class="num">{% if foyer.dans_validite is not defined %}—{% elif foyer.dans_validite %}dans la zone d'entraînement{% else %}hors zone d'entraînement : indicatif{% endif %}</td></tr>
+        <tr><td></td><td class="nom-classe">Part du carré observable aux {{ foyer.trajectoire | length }} dates</td><td class="num">{{ nb(foyer.part_carre_valide) }} %</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section class="panneau">
+    <header><h2>Votre vérification</h2>
+      <p>Regardez l'intérieur du contour rouge sur les deux images</p></header>
+    <div class="corps">
+      <form method="post">
+        <input type="hidden" name="jeton" value="{{ jeton() }}">
+        <div class="choix-avis">
+          {% for cle, libelle in libelles_avis.items() %}
+          <label><input type="radio" name="avis" value="{{ cle }}" {{ 'checked' if avis and avis['avis'] == cle }}> {{ libelle }}</label>
+          {% endfor %}
+        </div>
+        <textarea name="commentaire" rows="3" maxlength="500" placeholder="Observation (facultatif) : par ex. parcelle cultivée, dune, berge…">{{ avis['commentaire'] if avis else '' }}</textarea>
+        <button class="btn btn-principal btn-large" style="margin-top:10px">{{ ico("coche") }} Enregistrer
+          {%- if foyer.numero < n %} et passer à la zone {{ foyer.numero + 1 }}{% endif %}</button>
+      </form>
+      {% if avis %}<p class="note">Dernier avis enregistré le {{ avis['modifie_le'][:16] }}.</p>{% endif %}
+    </div>
+  </section>
+</div>
+
+<section class="panneau" style="margin-top:20px">
+  <header><h2>Trajectoire des pixels en perte, date par date</h2>
+    <p>Classes prédites par le U-Net (en % des pixels en perte du carré) et NDVI médian de ces pixels</p></header>
+  <div class="corps">
+    <div class="boite-graphique petite"><canvas id="graphique-ndvi"></canvas></div>
+    <div class="defile">
+    <table class="donnees serie">
+      <thead><tr><th>Date</th>{% for nom, couleur in classes_modele %}<th class="num"><i class="pastille" style="background:{{ couleur }}"></i> {{ nom }}</th>{% endfor %}<th class="num">NDVI médian</th></tr></thead>
+      <tbody>
+      {% for t in foyer.trajectoire %}
+        <tr><td class="mono">{{ t.date }}</td>
+          {% for v in t.classes %}<td class="num">{{ nb(v) }} %</td>{% endfor %}
+          <td class="num"><b>{% if t.ndvi is not none %}{{ nb(t.ndvi, 3) }}{% else %}—{% endif %}</b></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+document.getElementById("voir-contour") && document.getElementById("voir-contour").addEventListener("change", function () {
+  const voir = this.checked;
+  document.querySelectorAll(".calque").forEach(function (c) { c.style.visibility = voir ? "visible" : "hidden"; });
+});
+(function () {
+  const t = {{ foyer.trajectoire | tojson }};
+  const boite = document.getElementById("graphique-ndvi");
+  if (typeof Chart === "undefined") { boite.parentNode.style.display = "none"; return; }
+  const style = getComputedStyle(document.documentElement);
+  const texte = style.getPropertyValue("--attenue").trim(), ligne = style.getPropertyValue("--ligne").trim();
+  new Chart(boite, {
+    type: "line",
+    data: { labels: t.map(function (x) { return x.date; }),
+            datasets: [{ label: "NDVI médian des pixels en perte", data: t.map(function (x) { return x.ndvi; }),
+                         borderColor: "#c0392b", backgroundColor: "#c0392b", borderWidth: 2, pointRadius: 4, tension: 0 }] },
+    options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+               scales: { x: { ticks: { color: texte }, grid: { color: ligne } },
+                         y: { title: { display: true, text: "NDVI", color: texte }, ticks: { color: texte }, grid: { color: ligne } } } }
+  });
+})();
+</script>
+{% endblock %}

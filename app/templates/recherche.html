@@ -1,0 +1,19 @@
+{% extends "base.html" %}
+{% from "_icones.html" import ico %}
+{% block titre %}Recherche{% endblock %}
+{% block entete %}Recherche{% endblock %}
+{% block soustitre %}{% if q %}Résultats pour « {{ q }} »{% else %}Tapez une date (2024-02), un numéro d'analyse ou un nom de tuile.{% endif %}{% endblock %}
+{% block contenu %}
+<section class="panneau">
+  {% if resultats %}
+  <table class="donnees">
+    <thead><tr><th>Type</th><th>Élément</th><th></th></tr></thead>
+    <tbody>{% for type, texte, lien in resultats %}
+      <tr><td>{{ type }}</td><td><b>{{ texte }}</b></td><td style="text-align:right"><a class="btn btn-secondaire petit" href="{{ lien }}">Ouvrir</a></td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}
+  <div class="vide">{% if q %}Aucun résultat.{% else %}Utilisez la barre de recherche en haut de la page.{% endif %}</div>
+  {% endif %}
+</section>
+{% endblock %}

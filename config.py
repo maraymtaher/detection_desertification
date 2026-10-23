@@ -13,8 +13,8 @@ DOSSIER_RESULTATS = DOSSIER_DONNEES / "resultats"
 CHEMIN_BASE = DOSSIER_DONNEES / "base.sqlite"
 
 # Nom affiché dans l'interface : à modifier ici uniquement
-NOM_SYSTEME = "TerraWatch"
-SOUS_TITRE = "Suivi de la désertification par IA"
+NOM_SYSTEME = "DeepDesert"
+SOUS_TITRE = "Surveillance de la désertification par IA"
 
 # Surface maximale d'une analyse. Limite technique liée à la machine :
 # elle permet de traiter une tuile Sentinel-2 entière (environ 12 100 km²).

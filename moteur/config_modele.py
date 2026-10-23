@@ -23,7 +23,7 @@ QUANTIFICATION = 10000.0  # réflectance = valeur / 10000
 
 # Classes de sortie. La classe 2 regroupe les couverts épars (NDVI
 # typiquement entre 0,15 et 0,40), d'où son libellé.
-CLASSES = ["Eau", "Végétation saine", "Végétation clairsemée ou dégradée",
+CLASSES = ["Eau", "Végétation dense", "Végétation clairsemée",
            "Sol nu", "Sable/Dune"]
 COULEURS = ["#0000FF", "#006400", "#90EE90", "#D2B48C", "#FFA500"]
 NON_CLASSE = 255

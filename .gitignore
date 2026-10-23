@@ -3,3 +3,8 @@
 __pycache__/
 donnees/
 modeles/*.keras
+sauvegarde_avant_*/
+appliquer_ameliorations.py
+retirer_avertissements_zone.py
+retirer_mentions_zone.py
+rendre_responsive.py
